@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Create Test - ExamAce</title>
+    <style>
+        :root {
+            --primary: #15803d; --primary-foreground: #ffffff; --card: #ffffff; --border: #e5e7eb;
+            --muted: #f9fafb; --muted-foreground: #6b7280; --destructive: #b91c1c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #374151; background-color: var(--muted); }
+        .container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { font-size: 1.75rem; font-weight: 700; color: var(--primary); margin-bottom: 0.5rem; }
+        .card { background-color: var(--card); border: 1px solid var(--border); border-radius: 0.75rem; margin-bottom: 2rem; }
+        .hidden { display: none; }
+
+        /* Login Form */
+        #login-view { display: flex; justify-content: center; align-items: center; min-height: 80vh; }
+        .login-card { padding: 2.5rem; width: 100%; max-width: 400px; text-align: center;}
+        
+        /* Navigation Tabs */
+        .tabs { display: flex; border-bottom: 1px solid var(--border); background-color: #f3f4f6; border-radius: 0.75rem 0.75rem 0 0;}
+        .tab-link { padding: 1rem 1.5rem; cursor: pointer; font-weight: 600; color: var(--muted-foreground); border-bottom: 3px solid transparent; transition: all 0.2s; }
+        .tab-link.active { color: var(--primary); border-color: var(--primary); }
+        
+        .tab-content { padding: 2rem; border: 1px solid var(--border); border-top: none; border-radius: 0 0 0.75rem 0.75rem;}
+
+        /* General Form Styles */
+        .form-group { margin-bottom: 1.25rem; text-align: left; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.875rem; }
+        .form-input, .form-textarea, .form-select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 0.375rem; font-size: 1rem; transition: all 0.2s;}
+        .form-input:focus, .form-textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.2); }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 0.375rem; font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.3s ease; background-color: var(--primary); color: var(--primary-foreground); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .status { margin-top: 1.5rem; font-weight: 500; min-height: 24px; text-align: center; }
+        .status.success { color: var(--primary); } .status.error { color: var(--destructive); }
+        .spinner { display: inline-block; width: 1.25rem; height: 1.25rem; border: 3px solid rgba(255, 255, 255, 0.3); border-top-color: var(--primary-foreground); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* JSON Upload Specific */
+        #json-text-input { height: 250px; font-family: 'Courier New', Courier, monospace; }
+        .format-info { background-color: var(--muted); padding: 1rem; border-radius: 0.5rem; margin-top: 1rem; font-size: 0.9rem; text-align: left;}
+        pre { background-color: #e5e7eb; padding: 1rem; border-radius: 0.5rem; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', Courier, monospace; font-size: 0.875rem;}
+        
+        /* UI Form Specific */
+        #questions-container { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
+        .question-item { background-color: var(--muted); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login View -->
+        <div id="login-view">
+            <div class="card login-card">
+                <h1>Admin Login</h1>
+                <p>Please log in to manage tests.</p>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" class="form-input" required>
+                    </div>
+                    <button type="submit" class="btn" id="login-btn">Login</button>
+                    <div id="login-status" class="status"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Main Content View (Hidden by default) -->
+        <div id="main-content" class="hidden">
+            <h1>Create a New Test</h1>
+            <div class="card">
+                <nav class="tabs">
+                    <div class="tab-link active" data-tab="form">Create with Form</div>
+                    <div class="tab-link" data-tab="json">Upload from JSON</div>
+                </nav>
+
+                <!-- Tab 1: Create with UI Form -->
+                <div id="form-content" class="tab-content">
+                    <form id="ui-form">
+                        <h2>Test Details</h2>
+                        <div class="form-grid">
+                            <div class="form-group"><label for="title">Test Title</label><input type="text" id="title" class="form-input" required></div>
+                            <div class="form-group"><label for="type">Exam Type (e.g., JEE)</label><input type="text" id="type" class="form-input" required></div>
+                        </div>
+                        <div class="form-group"><label for="description">Description</label><textarea id="description" class="form-textarea" rows="3"></textarea></div>
+                        <div class="form-grid">
+                            <div class="form-group"><label for="duration">Duration (mins)</label><input type="number" id="duration" class="form-input" required></div>
+                            <div class="form-group"><label for="negativeMarks">Negative Marks</label><input type="number" step="0.01" id="negativeMarks" class="form-input" required></div>
+                            <div class="form-group"><label for="subjects">Subjects (comma-separated)</label><input type="text" id="subjects" class="form-input" required></div>
+                        </div>
+                        
+                        <div id="questions-container">
+                            <h2>Questions</h2>
+                            <div id="questions-list"></div>
+                            <button type="button" class="btn" id="add-question-btn" style="margin-top: 1rem; background-color: #374151; width: auto;">+ Add Question</button>
+                        </div>
+
+                        <div style="text-align: right; margin-top: 2rem;">
+                             <button type="submit" class="btn" id="submit-ui-form" style="width: auto;">Create Test</button>
+                        </div>
+                    </form>
+                    <div id="ui-status" class="status"></div>
+                </div>
+
+                <!-- Tab 2: Upload from JSON -->
+                <div id="json-content" class="tab-content hidden">
+                    <p>Paste your valid JSON content into the text area below. The `id` must be unique.</p>
+                    <textarea id="json-text-input" placeholder="Paste your test JSON here..."></textarea>
+                    <button id="upload-json-btn" class="btn" style="width: 100%; margin-top: 1rem;">Upload JSON</button>
+                    <div id="json-status" class="status"></div>
+                    <div class="format-info">
+                        <p><strong>Required JSON Format:</strong></p>
+                        <pre>
+{
+  "id": "unique-test-id-string",
+  "title": "Test Title",
+  "type": "JEE",
+  "description": "A comprehensive description of the test content.",
+  "duration": 180,
+  "questions": 2,
+  "subjects": ["Physics", "Chemistry"],
+  "difficulty": "medium",
+  "marks": 8,
+  "negativeMarks": 1,
+  "available": true,
+  "questions_data": [
+    {
+      "id": 1,
+      "subject": "Physics",
+      "topic": "Kinematics",
+      "questionText": "What is the first equation of motion?",
+      "options": [
+        "v = u + at",
+        "s = ut + 0.5at^2",
+        "v^2 = u^2 + 2as",
+        "F = ma"
+      ],
+      "correctAnswer": 0,
+      "marks": 4,
+      "negativeMarks": 1,
+      "solution": "The first equation of motion relates final velocity (v) to initial velocity (u), acceleration (a), and time (t)."
+    },
+    {
+      "id": 2,
+      "subject": "Chemistry",
+      "topic": "Atomic Structure",
+      "questionText": "What is the chemical symbol for Gold?",
+      "options": [
+        "Ag",
+        "Au",
+        "G",
+        "Go"
+      ],
+      "correctAnswer": 1,
+      "marks": 4,
+      "negativeMarks": 1,
+      "solution": "The symbol for Gold is Au, derived from its Latin name, 'aurum'."
+    }
+  ]
+}
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyCQ34ZAWWCMuaQ01fvX0sI-YdklK0mJ5aw",
+          authDomain: "testseries-38752.firebaseapp.com",
+          projectId: "testseries-38752",
+          storageBucket: "testseries-38752.firebasestorage.app",
+          messagingSenderId: "519384534407",
+          appId: "1:519384534407:web:201265a9d703708334d722"
+        };
+      
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        class TestUploader {
+            constructor() {
+                this.questions = [];
+                this.setupAuthListener();
+                this.setupEventListeners();
+            }
+
+            setupAuthListener() {
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        document.getElementById('login-view').classList.add('hidden');
+                        document.getElementById('main-content').classList.remove('hidden');
+                    } else {
+                        document.getElementById('login-view').classList.remove('hidden');
+                        document.getElementById('main-content').classList.add('hidden');
+                    }
+                });
+            }
+
+            setupEventListeners() {
+                // Login
+                document.getElementById('login-form').addEventListener('submit', e => this.handleLogin(e));
+
+                // Tabs
+                const tabs = document.querySelectorAll('.tab-link');
+                tabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        tabs.forEach(t => t.classList.remove('active'));
+                        tab.classList.add('active');
+                        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                        document.getElementById(`${tab.dataset.tab}-content`).classList.remove('hidden');
+                    });
+                });
+                
+                // UI Form
+                document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
+                document.getElementById('ui-form').addEventListener('submit', e => this.handleUiFormSubmit(e));
+
+                // JSON Upload
+                document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
+            }
+
+            async handleLogin(e) {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const statusDiv = document.getElementById('login-status');
+                const loginBtn = document.getElementById('login-btn');
+                
+                this.setLoading(loginBtn, statusDiv, 'Logging in...');
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    // Auth listener will handle showing the main content
+                } catch (error) {
+                    this.setError(statusDiv, error.message);
+                } finally {
+                    this.setIdle(loginBtn, 'Login');
+                }
+            }
+
+            addQuestionField() {
+                const index = this.questions.length;
+                this.questions.push({}); // Placeholder for data
+                const questionList = document.getElementById('questions-list');
+                const fieldHTML = `
+                    <div class="question-item" id="question-${index}">
+                        <h4>Question ${index + 1}</h4>
+                        <div class="form-group"><label>Question Text</label><textarea class="form-textarea question-text" rows="3" required></textarea></div>
+                        <div class="form-grid">
+                            <div class="form-group"><label>Option A</label><input type="text" class="form-input option-a" required></div>
+                            <div class="form-group"><label>Option B</label><input type="text" class="form-input option-b" required></div>
+                            <div class="form-group"><label>Option C</label><input type="text" class="form-input option-c" required></div>
+                            <div class="form-group"><label>Option D</label><input type="text" class="form-input option-d" required></div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group"><label>Correct Answer</label><select class="form-select correct-answer"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></div>
+                            <div class="form-group"><label>Subject</label><input type="text" class="form-input question-subject" required></div>
+                            <div class="form-group"><label>Marks</label><input type="number" class="form-input question-marks" value="4" required></div>
+                        </div>
+                         <div class="form-group"><label>Solution</label><textarea class="form-textarea solution" rows="2" required></textarea></div>
+                    </div>`;
+                questionList.insertAdjacentHTML('beforeend', fieldHTML);
+            }
+
+            async handleUiFormSubmit(e) {
+                e.preventDefault();
+                const statusDiv = document.getElementById('ui-status');
+                const submitBtn = document.getElementById('submit-ui-form');
+                this.setLoading(submitBtn, statusDiv, 'Creating...');
+
+                try {
+                    const testData = this.buildTestDataFromForm();
+                    await this.uploadTestData(testData, statusDiv);
+                    e.target.reset();
+                    document.getElementById('questions-list').innerHTML = '';
+                    this.questions = [];
+                } catch (error) {
+                    this.setError(statusDiv, `Failed: ${error.message}`);
+                } finally {
+                    this.setIdle(submitBtn, 'Create Test');
+                }
+            }
+            
+            buildTestDataFromForm() {
+                const title = document.getElementById('title').value;
+                const testId = `${title.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
+                
+                const questionsData = Array.from(document.querySelectorAll('.question-item')).map((q, i) => ({
+                    id: i + 1,
+                    questionText: q.querySelector('.question-text').value,
+                    options: [
+                        q.querySelector('.option-a').value, q.querySelector('.option-b').value,
+                        q.querySelector('.option-c').value, q.querySelector('.option-d').value,
+                    ],
+                    correctAnswer: parseInt(q.querySelector('.correct-answer').value),
+                    subject: q.querySelector('.question-subject').value,
+                    topic: q.querySelector('.question-subject').value, // Assuming subject is topic for now
+                    marks: parseInt(q.querySelector('.question-marks').value),
+                    negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
+                    solution: q.querySelector('.solution').value
+                }));
+                
+                if (questionsData.length === 0) throw new Error("Please add at least one question.");
+                if (questionsData.some(q => !q.questionText || q.options.some(o => !o) || !q.subject)) {
+                    throw new Error("All question fields (text, all 4 options, subject) are required.");
+                }
+
+                return {
+                    id: testId,
+                    title: title,
+                    type: document.getElementById('type').value,
+                    description: document.getElementById('description').value,
+                    duration: parseInt(document.getElementById('duration').value),
+                    negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
+                    subjects: document.getElementById('subjects').value.split(',').map(s => s.trim()),
+                    questions: questionsData.length,
+                    marks: questionsData.reduce((sum, q) => sum + q.marks, 0),
+                    available: true,
+                    difficulty: 'medium', // Default value
+                    questions_data: questionsData
+                };
+            }
+
+            async handleJsonUpload() {
+                const jsonInput = document.getElementById('json-text-input');
+                const statusDiv = document.getElementById('json-status');
+                const uploadBtn = document.getElementById('upload-json-btn');
+                
+                if (!jsonInput.value.trim()) {
+                    this.setError(statusDiv, 'Please paste JSON content first.');
+                    return;
+                }
+                this.setLoading(uploadBtn, statusDiv, 'Uploading...');
+                
+                try {
+                    const testData = JSON.parse(jsonInput.value);
+                    await this.uploadTestData(testData, statusDiv);
+                    jsonInput.value = '';
+                } catch (error) {
+                    this.setError(statusDiv, `Upload failed: ${error.message}`);
+                } finally {
+                    this.setIdle(uploadBtn, 'Upload JSON');
+                }
+            }
+
+            async uploadTestData(testData, statusDiv) {
+                if (!testData.id || !testData.title || !testData.questions_data) {
+                    throw new Error("Invalid data structure. 'id', 'title', and 'questions_data' are required.");
+                }
+
+                // 1. Save full test data
+                statusDiv.textContent = 'Uploading full test data...';
+                const testRef = doc(db, 'tests', testData.id);
+                await setDoc(testRef, testData);
+
+                // 2. Update aggregated list
+                statusDiv.textContent = 'Updating aggregated test list...';
+                const aggregateDocRef = doc(db, "test_aggregates", "all_tests");
+                const aggregateDocSnap = await getDoc(aggregateDocRef);
+                const aggregatedData = aggregateDocSnap.exists() ? aggregateDocSnap.data() : { tests: [] };
+                let testsList = aggregatedData.tests || [];
+
+                const { questions_data, ...metadata } = testData;
+                const existingIndex = testsList.findIndex(t => t.id === metadata.id);
+                if (existingIndex > -1) testsList[existingIndex] = metadata;
+                else testsList.push(metadata);
+
+                await setDoc(aggregateDocRef, { tests: testsList, lastUpdated: new Date().toISOString() });
+                
+                this.setSuccess(statusDiv, `Test "${testData.title}" uploaded successfully!`);
+            }
+
+            setLoading(btn, statusDiv, text) {
+                btn.disabled = true;
+                btn.innerHTML = `<div class="spinner"></div><span>${text}</span>`;
+                statusDiv.textContent = 'Processing...';
+                statusDiv.className = 'status';
+            }
+
+            setError(statusDiv, message) {
+                statusDiv.textContent = message;
+                statusDiv.className = 'status error';
+            }
+             setSuccess(statusDiv, message) {
+                statusDiv.textContent = message;
+                statusDiv.className = 'status success';
+            }
+
+            setIdle(btn, text) {
+                 btn.disabled = false;
+                 btn.innerHTML = `<span>${text}</span>`;
+            }
+        }
+        
+        new TestUploader();
+    </script>
+</body>
+</html>
+
