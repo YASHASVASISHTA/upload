@@ -49,7 +49,7 @@
         #questions-container { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
         .question-item { background-color: var(--muted); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border); }
         
-        /* NEW: Question Header and Delete Button Styles */
+        /* Question Header and Delete Button Styles */
         .question-header { 
             display: flex; 
             justify-content: space-between; 
@@ -66,6 +66,7 @@
             font-size: 0.8rem; 
             line-height: 1;
         }
+        .login-note { font-size: 0.85rem; color: #4b5563; margin-top: 1rem;}
     </style>
 </head>
 <body>
@@ -87,6 +88,11 @@
                     <button type="submit" class="btn" id="login-btn">Login</button>
                     <div id="login-status" class="status"></div>
                 </form>
+                <div class="login-note">
+                    <p><strong>Note:</strong> Since this is a hardcoded demo, use the following credentials to access the upload feature:</p>
+                    <p>Email: <strong>test@admin.com</strong></p>
+                    <p>Password: <strong>password</strong></p>
+                </div>
             </div>
         </div>
 
@@ -210,9 +216,11 @@
             setupAuthListener() {
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
+                        // User is signed in, show main content
                         document.getElementById('login-view').classList.add('hidden');
                         document.getElementById('main-content').classList.remove('hidden');
                     } else {
+                        // User is signed out, show login
                         document.getElementById('login-view').classList.remove('hidden');
                         document.getElementById('main-content').classList.add('hidden');
                     }
@@ -236,10 +244,10 @@
                 
                 // UI Form
                 document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
-                // New event listener for JSON generation
+                // Event listener for JSON generation (works without auth)
                 document.getElementById('generate-json-btn').addEventListener('click', () => this.handleGenerateJson());
 
-                // JSON Upload
+                // JSON Upload (requires auth)
                 document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
             }
 
@@ -252,8 +260,9 @@
                 
                 this.setLoading(loginBtn, statusDiv, 'Logging in...');
                 try {
+                    // Sign in using email/password (assuming these credentials exist in Firebase Auth)
                     await signInWithEmailAndPassword(auth, email, password);
-                    // Auth listener will handle showing the main content
+                    // Auth listener will automatically handle showing the main content on success
                 } catch (error) {
                     this.setError(statusDiv, error.message);
                 } finally {
@@ -262,7 +271,6 @@
             }
 
             addQuestionField() {
-                // We use the count of existing elements for the index, as the `this.questions` array is no longer the source of truth for quantity
                 const index = document.querySelectorAll('#questions-list .question-item').length;
                 const questionList = document.getElementById('questions-list');
                 
@@ -291,7 +299,7 @@
                 questionList.insertAdjacentHTML('beforeend', fieldHTML);
             }
             
-            // NEW METHOD: Removes the question block and re-indexes the remaining questions
+            // Removes the question block and re-indexes the remaining questions
             deleteQuestionField(buttonElement) {
                 const questionItem = buttonElement.closest('.question-item');
                 if (questionItem) {
@@ -300,7 +308,7 @@
                 }
             }
 
-            // NEW METHOD: Re-indexes question numbers after deletion
+            // Re-indexes question numbers after deletion
             reIndexQuestions() {
                 const questionItems = document.querySelectorAll('#questions-list .question-item');
                 questionItems.forEach((item, index) => {
@@ -308,7 +316,6 @@
                     if (header) {
                         header.textContent = `Question ${index + 1}`;
                     }
-                    // Update ID for consistency, though not strictly needed for logic here
                     item.id = `question-${index}`;
                 });
             }
@@ -405,7 +412,7 @@
                 };
             }
 
-            // NOTE: uploadTestData and handleJsonUpload are kept for the JSON tab functionality.
+            // This function handles the actual upload to Firebase, which is only accessible after login
             async handleJsonUpload() {
                 const jsonInput = document.getElementById('json-text-input');
                 const statusDiv = document.getElementById('json-status');
@@ -432,11 +439,16 @@
                 if (!testData.id || !testData.title || !testData.questions_data) {
                     throw new Error("Invalid data structure. 'id', 'title', and 'questions_data' are required.");
                 }
+                
+                if (!auth.currentUser) {
+                    // Safety check, though the UI should prevent this
+                    throw new Error("Authentication required to upload data."); 
+                }
 
                 // 1. Save full test data
                 statusDiv.textContent = 'Uploading full test data...';
                 const testRef = doc(db, 'tests', testData.id);
-                // Ensure data only includes valid fields to avoid errors
+                // Filtering data to ensure only relevant fields are saved
                 const dataToSave = { 
                     id: testData.id,
                     title: testData.title,
@@ -452,7 +464,7 @@
                     questions_data: testData.questions_data.map(q => ({
                         id: q.id,
                         questionText: q.questionText,
-                        questionImageUrl: q.questionImageUrl, // Includes new field
+                        questionImageUrl: q.questionImageUrl, 
                         options: q.options,
                         correctAnswer: q.correctAnswer,
                         subject: q.subject,
@@ -519,7 +531,7 @@
         }
         
         // FIX: Expose uploader instance explicitly to the window object so it can be called 
-        // from the inline HTML onclick attribute (which runs in the global scope).
+        // from the inline HTML onclick attribute.
         const uploader = new TestUploader(); 
         window.uploader = uploader;
     </script>
