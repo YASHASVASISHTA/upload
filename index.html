@@ -48,6 +48,24 @@
         /* UI Form Specific */
         #questions-container { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
         .question-item { background-color: var(--muted); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border); }
+        
+        /* NEW: Question Header and Delete Button Styles */
+        .question-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 1rem; 
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .delete-btn { 
+            background-color: var(--destructive); 
+            color: var(--primary-foreground); 
+            padding: 0.4rem 0.8rem; 
+            width: auto; 
+            font-size: 0.8rem; 
+            line-height: 1;
+        }
     </style>
 </head>
 <body>
@@ -83,7 +101,7 @@
 
                 <!-- Tab 1: Create with UI Form -->
                 <div id="form-content" class="tab-content">
-                    <form id="ui-form">
+                    <form id="ui-form" onsubmit="return false;"> 
                         <h2>Test Details</h2>
                         <div class="form-grid">
                             <div class="form-group"><label for="title">Test Title</label><input type="text" id="title" class="form-input" required></div>
@@ -103,10 +121,13 @@
                         </div>
 
                         <div style="text-align: right; margin-top: 2rem;">
-                             <button type="submit" class="btn" id="submit-ui-form" style="width: auto;">Create Test</button>
+                             <button type="button" class="btn" id="generate-json-btn" style="width: auto;">Generate JSON</button>
                         </div>
                     </form>
                     <div id="ui-status" class="status"></div>
+                    <div class="format-info">
+                        <p><strong>Note:</strong> The "Generate JSON" button will open a new window containing the generated test JSON, which includes the **"questionImageUrl"** field for each question.</p>
+                    </div>
                 </div>
 
                 <!-- Tab 2: Upload from JSON -->
@@ -116,7 +137,7 @@
                     <button id="upload-json-btn" class="btn" style="width: 100%; margin-top: 1rem;">Upload JSON</button>
                     <div id="json-status" class="status"></div>
                     <div class="format-info">
-                        <p><strong>Required JSON Format:</strong></p>
+                        <p><strong>Required JSON Format (now includes "questionImageUrl"):</strong></p>
                         <pre>
 {
   "id": "unique-test-id-string",
@@ -136,6 +157,7 @@
       "subject": "Physics",
       "topic": "Kinematics",
       "questionText": "What is the first equation of motion?",
+      "questionImageUrl": "https://example.com/diagram1.png",  <!-- NEW FIELD ADDED -->
       "options": [
         "v = u + at",
         "s = ut + 0.5at^2",
@@ -147,22 +169,7 @@
       "negativeMarks": 1,
       "solution": "The first equation of motion relates final velocity (v) to initial velocity (u), acceleration (a), and time (t)."
     },
-    {
-      "id": 2,
-      "subject": "Chemistry",
-      "topic": "Atomic Structure",
-      "questionText": "What is the chemical symbol for Gold?",
-      "options": [
-        "Ag",
-        "Au",
-        "G",
-        "Go"
-      ],
-      "correctAnswer": 1,
-      "marks": 4,
-      "negativeMarks": 1,
-      "solution": "The symbol for Gold is Au, derived from its Latin name, 'aurum'."
-    }
+    // ... more questions
   ]
 }
                         </pre>
@@ -177,6 +184,8 @@
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+        // IMPORTANT: In a real environment, __firebase_config and __initial_auth_token would be dynamically provided.
+        // Using hardcoded config for demonstration purposes in this single file context.
         const firebaseConfig = {
           apiKey: "AIzaSyCQ34ZAWWCMuaQ01fvX0sI-YdklK0mJ5aw",
           authDomain: "testseries-38752.firebaseapp.com",
@@ -195,6 +204,7 @@
                 this.questions = [];
                 this.setupAuthListener();
                 this.setupEventListeners();
+                this.addQuestionField(); // Add one question by default
             }
 
             setupAuthListener() {
@@ -226,7 +236,8 @@
                 
                 // UI Form
                 document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
-                document.getElementById('ui-form').addEventListener('submit', e => this.handleUiFormSubmit(e));
+                // New event listener for JSON generation
+                document.getElementById('generate-json-btn').addEventListener('click', () => this.handleGenerateJson());
 
                 // JSON Upload
                 document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
@@ -251,13 +262,19 @@
             }
 
             addQuestionField() {
-                const index = this.questions.length;
-                this.questions.push({}); // Placeholder for data
+                // We use the count of existing elements for the index, as the `this.questions` array is no longer the source of truth for quantity
+                const index = document.querySelectorAll('#questions-list .question-item').length;
                 const questionList = document.getElementById('questions-list');
+                
+                // The `uploader` call works because `window.uploader` is set at the end of the script.
                 const fieldHTML = `
                     <div class="question-item" id="question-${index}">
-                        <h4>Question ${index + 1}</h4>
+                        <div class="question-header">
+                            <h4>Question ${index + 1}</h4>
+                            <button type="button" class="btn delete-btn" onclick="uploader.deleteQuestionField(this)">Delete Question</button>
+                        </div>
                         <div class="form-group"><label>Question Text</label><textarea class="form-textarea question-text" rows="3" required></textarea></div>
+                        <div class="form-group"><label>Question Image URL (Optional)</label><input type="url" class="form-input question-image-url"></div>
                         <div class="form-grid">
                             <div class="form-group"><label>Option A</label><input type="text" class="form-input option-a" required></div>
                             <div class="form-group"><label>Option B</label><input type="text" class="form-input option-b" required></div>
@@ -273,50 +290,105 @@
                     </div>`;
                 questionList.insertAdjacentHTML('beforeend', fieldHTML);
             }
+            
+            // NEW METHOD: Removes the question block and re-indexes the remaining questions
+            deleteQuestionField(buttonElement) {
+                const questionItem = buttonElement.closest('.question-item');
+                if (questionItem) {
+                    questionItem.remove();
+                    this.reIndexQuestions();
+                }
+            }
 
-            async handleUiFormSubmit(e) {
-                e.preventDefault();
+            // NEW METHOD: Re-indexes question numbers after deletion
+            reIndexQuestions() {
+                const questionItems = document.querySelectorAll('#questions-list .question-item');
+                questionItems.forEach((item, index) => {
+                    const header = item.querySelector('.question-header h4');
+                    if (header) {
+                        header.textContent = `Question ${index + 1}`;
+                    }
+                    // Update ID for consistency, though not strictly needed for logic here
+                    item.id = `question-${index}`;
+                });
+            }
+
+
+            async handleGenerateJson() {
                 const statusDiv = document.getElementById('ui-status');
-                const submitBtn = document.getElementById('submit-ui-form');
-                this.setLoading(submitBtn, statusDiv, 'Creating...');
+                const generateBtn = document.getElementById('generate-json-btn');
+                this.setLoading(generateBtn, statusDiv, 'Generating...');
 
                 try {
                     const testData = this.buildTestDataFromForm();
-                    await this.uploadTestData(testData, statusDiv);
-                    e.target.reset();
-                    document.getElementById('questions-list').innerHTML = '';
-                    this.questions = [];
+                    const jsonString = JSON.stringify(testData, null, 2);
+
+                    const newWindow = window.open('', 'JSON Preview', 'width=800,height=600');
+                    if (newWindow) {
+                        newWindow.document.write(`
+                            <!DOCTYPE html>
+                            <html lang="en">
+                            <head>
+                                <title>Generated Test JSON</title>
+                                <style>
+                                    body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
+                                    pre { background-color: #ffffff; padding: 15px; border: 1px solid #ccc; border-radius: 5px; white-space: pre-wrap; font-size: 0.9em; }
+                                    h3 { color: #15803d; }
+                                </style>
+                            </head>
+                            <body>
+                                <h3>Generated JSON Output</h3>
+                                <p>Copy the content below. This JSON includes the new <strong>questionImageUrl</strong> for each question.</p>
+                                <pre id="json-output">${jsonString}</pre>
+                            </body>
+                            </html>
+                        `);
+                        newWindow.document.close();
+                        this.setSuccess(statusDiv, `JSON successfully generated and opened in a new window!`);
+                    } else {
+                        throw new Error("Popup blocked. Please allow popups to see the generated JSON.");
+                    }
                 } catch (error) {
-                    this.setError(statusDiv, `Failed: ${error.message}`);
+                    this.setError(statusDiv, `Generation Failed: ${error.message}`);
                 } finally {
-                    this.setIdle(submitBtn, 'Create Test');
+                    this.setIdle(generateBtn, 'Generate JSON');
                 }
             }
             
             buildTestDataFromForm() {
                 const title = document.getElementById('title').value;
+                if (!title) throw new Error("Test Title is required.");
                 const testId = `${title.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
                 
-                const questionsData = Array.from(document.querySelectorAll('.question-item')).map((q, i) => ({
-                    id: i + 1,
-                    questionText: q.querySelector('.question-text').value,
-                    options: [
-                        q.querySelector('.option-a').value, q.querySelector('.option-b').value,
-                        q.querySelector('.option-c').value, q.querySelector('.option-d').value,
-                    ],
-                    correctAnswer: parseInt(q.querySelector('.correct-answer').value),
-                    subject: q.querySelector('.question-subject').value,
-                    topic: q.querySelector('.question-subject').value, // Assuming subject is topic for now
-                    marks: parseInt(q.querySelector('.question-marks').value),
-                    negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
-                    solution: q.querySelector('.solution').value
-                }));
+                const questionsData = Array.from(document.querySelectorAll('.question-item')).map((q, i) => {
+                    const questionText = q.querySelector('.question-text').value;
+                    const options = [
+                        q.querySelector('.option-a').value, 
+                        q.querySelector('.option-b').value,
+                        q.querySelector('.option-c').value, 
+                        q.querySelector('.option-d').value,
+                    ];
+                    
+                    if (!questionText || options.some(o => !o)) {
+                        throw new Error(`Question ${i + 1} is incomplete. Text and all 4 options are required.`);
+                    }
+
+                    return {
+                        id: i + 1,
+                        questionText: questionText,
+                        questionImageUrl: q.querySelector('.question-image-url').value.trim() || undefined, // NEW FIELD
+                        options: options,
+                        correctAnswer: parseInt(q.querySelector('.correct-answer').value),
+                        subject: q.querySelector('.question-subject').value,
+                        topic: q.querySelector('.question-subject').value, // Assuming subject is topic for now
+                        marks: parseInt(q.querySelector('.question-marks').value),
+                        negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
+                        solution: q.querySelector('.solution').value
+                    }
+                });
                 
                 if (questionsData.length === 0) throw new Error("Please add at least one question.");
-                if (questionsData.some(q => !q.questionText || q.options.some(o => !o) || !q.subject)) {
-                    throw new Error("All question fields (text, all 4 options, subject) are required.");
-                }
-
+                
                 return {
                     id: testId,
                     title: title,
@@ -333,6 +405,7 @@
                 };
             }
 
+            // NOTE: uploadTestData and handleJsonUpload are kept for the JSON tab functionality.
             async handleJsonUpload() {
                 const jsonInput = document.getElementById('json-text-input');
                 const statusDiv = document.getElementById('json-status');
@@ -363,7 +436,34 @@
                 // 1. Save full test data
                 statusDiv.textContent = 'Uploading full test data...';
                 const testRef = doc(db, 'tests', testData.id);
-                await setDoc(testRef, testData);
+                // Ensure data only includes valid fields to avoid errors
+                const dataToSave = { 
+                    id: testData.id,
+                    title: testData.title,
+                    type: testData.type,
+                    description: testData.description,
+                    duration: testData.duration,
+                    negativeMarks: testData.negativeMarks,
+                    subjects: testData.subjects,
+                    questions: testData.questions,
+                    marks: testData.marks,
+                    available: testData.available,
+                    difficulty: testData.difficulty,
+                    questions_data: testData.questions_data.map(q => ({
+                        id: q.id,
+                        questionText: q.questionText,
+                        questionImageUrl: q.questionImageUrl, // Includes new field
+                        options: q.options,
+                        correctAnswer: q.correctAnswer,
+                        subject: q.subject,
+                        topic: q.topic,
+                        marks: q.marks,
+                        negativeMarks: q.negativeMarks,
+                        solution: q.solution
+                    }))
+                };
+
+                await setDoc(testRef, dataToSave);
 
                 // 2. Update aggregated list
                 statusDiv.textContent = 'Updating aggregated test list...';
@@ -372,7 +472,21 @@
                 const aggregatedData = aggregateDocSnap.exists() ? aggregateDocSnap.data() : { tests: [] };
                 let testsList = aggregatedData.tests || [];
 
-                const { questions_data, ...metadata } = testData;
+                // Create metadata object for aggregate list
+                const metadata = {
+                    id: testData.id,
+                    title: testData.title,
+                    type: testData.type,
+                    description: testData.description,
+                    duration: testData.duration,
+                    negativeMarks: testData.negativeMarks,
+                    subjects: testData.subjects,
+                    questions: testData.questions,
+                    marks: testData.marks,
+                    available: testData.available,
+                    difficulty: testData.difficulty,
+                };
+
                 const existingIndex = testsList.findIndex(t => t.id === metadata.id);
                 if (existingIndex > -1) testsList[existingIndex] = metadata;
                 else testsList.push(metadata);
@@ -404,8 +518,10 @@
             }
         }
         
-        new TestUploader();
+        // FIX: Expose uploader instance explicitly to the window object so it can be called 
+        // from the inline HTML onclick attribute (which runs in the global scope).
+        const uploader = new TestUploader(); 
+        window.uploader = uploader;
     </script>
 </body>
 </html>
-
