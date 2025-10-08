@@ -116,6 +116,19 @@
             background-color: #e0fdf4;
             border-radius: 0.3rem;
         }
+
+        /* Generated JSON Section Styles */
+        #json-output-area {
+            border: 2px solid #a7f3d0; /* Tailwind emerald-200 */
+            background-color: #ecfdf5; /* Tailwind emerald-50 */
+        }
+        .json-actions {
+            display: flex; 
+            justify-content: space-between; 
+            gap: 1rem; 
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
@@ -179,9 +192,23 @@
                              <button type="button" class="btn" id="generate-json-btn" style="width: auto;">Generate JSON</button>
                         </div>
                     </form>
+                    
                     <div id="ui-status" class="status"></div>
+                    
+                    <!-- NEW: Generated JSON Output Area (on-page) -->
+                    <div id="json-output-area" class="card hidden" style="margin-top: 2rem; padding: 1.5rem;">
+                        <h3 style="font-size: 1.25rem; color: #1f2937; margin-bottom: 1rem;">Generated Test JSON</h3>
+                        <div class="json-actions">
+                            <button type="button" class="btn" id="copy-json-onpage-btn" style="width: 48%; background-color: #059669;">Copy JSON</button>
+                            <button type="button" class="btn" id="clear-form-btn" style="width: 48%; background-color: #ef4444;">Clear Form (Redo)</button>
+                        </div>
+                        <pre id="json-output-pre" style="max-height: 400px; overflow-y: auto;"></pre>
+                        <div id="copy-status-onpage" class="status"></div>
+                    </div>
+                    <!-- END NEW SECTION -->
+
                     <div class="format-info">
-                        <p><strong>Note:</strong> The "Generate JSON" button will open a new window containing the generated test JSON, which contains the complete structure for uploading via the JSON tab.</p>
+                        <p><strong>Note:</strong> The "Generate JSON" button will display the output below, allowing you to copy it directly or clear the form to start over.</p>
                     </div>
                 </div>
 
@@ -231,7 +258,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         // --- CONFIGURATION ---
-        const BUCKET_NAME = 'Photos'; // <--- UPDATED: Changed from 'question-images' to 'Photos'
+        const BUCKET_NAME = 'Photos'; 
 
         // Firebase Config (for Auth and Firestore Data)
         const firebaseConfig = {
@@ -294,7 +321,12 @@
                 // UI Form
                 document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
                 document.getElementById('questions-list').addEventListener('click', e => this.handleQuestionListClick(e));
+                
+                // Generation, Copy, and Clear (New On-Page Functionality)
                 document.getElementById('generate-json-btn').addEventListener('click', () => this.handleGenerateJson());
+                document.getElementById('copy-json-onpage-btn').addEventListener('click', () => this.copyJson());
+                document.getElementById('clear-form-btn').addEventListener('click', () => this.clearForm());
+
 
                 // JSON Upload (requires auth)
                 document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
@@ -466,41 +498,29 @@
                 });
             }
 
+            // UPDATED: Handle JSON generation to display on the page
             handleGenerateJson() {
                 const statusDiv = document.getElementById('ui-status');
                 const generateBtn = document.getElementById('generate-json-btn');
+                const outputArea = document.getElementById('json-output-area');
+                const outputPre = document.getElementById('json-output-pre');
+
                 this.setLoading(generateBtn, statusDiv, 'Generating...', 'json');
 
                 try {
                     const testData = this.buildTestDataFromForm();
                     const jsonString = JSON.stringify(testData, null, 2);
 
-                    const newWindow = window.open('', 'JSON Preview', 'width=800,height=600');
-                    if (newWindow) {
-                        newWindow.document.write(`
-                            <!DOCTYPE html>
-                            <html lang="en">
-                            <head>
-                                <title>Generated Test JSON</title>
-                                <style>
-                                    body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
-                                    pre { background-color: #ffffff; padding: 15px; border: 1px solid #ccc; border-radius: 5px; white-space: pre-wrap; font-size: 0.9em; }
-                                    h3 { color: #15803d; }
-                                </style>
-                            </head>
-                            <body>
-                                <h3>Generated JSON Output</h3>
-                                <p>Copy the content below. Note the <strong>questionImageUrl</strong> field for images.</p>
-                                <pre id="json-output">${jsonString}</pre>
-                            </body>
-                            </html>
-                        `);
-                        newWindow.document.close();
-                        this.setSuccess(statusDiv, `JSON successfully generated and opened in a new window!`);
-                    } else {
-                        throw new Error("Popup blocked. Please allow popups to see the generated JSON.");
-                    }
+                    outputPre.textContent = jsonString;
+                    outputArea.classList.remove('hidden');
+                    
+                    // Scroll to the generated JSON section
+                    outputArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    
+                    this.setSuccess(statusDiv, `JSON successfully generated below. Copy it or upload directly!`);
+
                 } catch (error) {
+                    outputArea.classList.add('hidden');
                     this.setError(statusDiv, `Generation Failed: ${error.message}`);
                     console.error("JSON Generation Error:", error);
                 } finally {
@@ -508,6 +528,59 @@
                 }
             }
             
+            // NEW: Copy JSON to clipboard function
+            copyJson() {
+                const jsonOutput = document.getElementById('json-output-pre').innerText;
+                const statusDiv = document.getElementById('copy-status-onpage');
+
+                // Use document.execCommand('copy') for reliability in iframes
+                const tempTextArea = document.createElement('textarea');
+                tempTextArea.value = jsonOutput;
+                tempTextArea.style.position = 'fixed'; // Make it invisible
+                tempTextArea.style.left = '-9999px';
+                document.body.appendChild(tempTextArea);
+                tempTextArea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    this.setSuccess(statusDiv, 'JSON Copied to clipboard!');
+                } catch (err) {
+                    this.setError(statusDiv, 'Failed to copy JSON. Please select the text and copy manually.');
+                } finally {
+                    document.body.removeChild(tempTextArea);
+                    // Clear status after a short delay
+                    setTimeout(() => {
+                        statusDiv.textContent = '';
+                        statusDiv.className = 'status';
+                    }, 2000);
+                }
+            }
+
+            // NEW: Clear form/redo page function
+            clearForm() {
+                // Clear Test Details
+                document.getElementById('title').value = '';
+                document.getElementById('type').value = '';
+                document.getElementById('description').value = '';
+                document.getElementById('duration').value = '';
+                document.getElementById('negativeMarks').value = '';
+                document.getElementById('subjects').value = '';
+
+                // Clear Questions
+                const questionsList = document.getElementById('questions-list');
+                questionsList.innerHTML = ''; // Remove all question fields
+                this.addQuestionField(); // Add one fresh question field
+
+                // Hide JSON output and clear status
+                document.getElementById('json-output-area').classList.add('hidden');
+                document.getElementById('ui-status').textContent = 'Form successfully reset. Start creating your new test!';
+                document.getElementById('ui-status').className = 'status success';
+                
+                // Scroll to the top of the form
+                document.getElementById('ui-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+
             buildTestDataFromForm() {
                 const title = document.getElementById('title').value;
                 if (!title) throw new Error("Test Title is required.");
