@@ -16,7 +16,7 @@
         .card { background-color: var(--card); border: 1px solid var(--border); border-radius: 0.75rem; margin-bottom: 2rem; }
         .hidden { display: none; }
 
-        /* Login Form */
+        /* Login View */
         #login-view { display: flex; justify-content: center; align-items: center; min-height: 80vh; }
         .login-card { padding: 2.5rem; width: 100%; max-width: 400px; text-align: center; border-radius: 0.75rem; }
         
@@ -33,7 +33,7 @@
         .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.875rem; }
         .form-input, .form-textarea, .form-select { 
             width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 0.375rem; font-size: 1rem; transition: all 0.2s;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* Subtle shadow */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
         .form-input:focus, .form-textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.2); }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
@@ -81,6 +81,41 @@
         }
         .delete-btn:hover { background-color: #ef4444; }
         .login-note { font-size: 0.85rem; color: #4b5563; margin-top: 1rem; text-align: left; padding: 1rem; background-color: #f3f4f6; border-radius: 0.5rem;}
+
+        /* Image Upload Specific Styles */
+        .image-upload-group {
+            border: 1px solid #cceeff; /* Light blue border */
+            background-color: #f0f8ff; /* Very light blue background */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+        .image-upload-flex {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap; /* Allows wrapping on smaller screens */
+        }
+        .image-upload-flex input[type="file"] {
+            flex-grow: 1;
+            padding: 0; /* Remove default padding for clean look */
+            min-width: 150px;
+        }
+        .image-status {
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            color: #374151;
+            min-height: 1.5rem;
+        }
+        .image-url-display {
+            font-size: 0.8rem;
+            word-break: break-all;
+            color: #10b981;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background-color: #e0fdf4;
+            border-radius: 0.3rem;
+        }
     </style>
 </head>
 <body>
@@ -163,30 +198,18 @@
   "id": "unique-test-id-string",
   "title": "Test Title",
   "type": "JEE",
-  "description": "A comprehensive description of the test content.",
-  "duration": 180,
-  "questions": 2,
-  "subjects": ["Physics", "Chemistry"],
-  "difficulty": "medium",
-  "marks": 8,
-  "negativeMarks": 1,
-  "available": true,
+  // ... other metadata
   "questions_data": [
     {
       "id": 1,
-      "subject": "Physics",
-      "topic": "Kinematics",
       "questionText": "What is the first equation of motion?",
+      "questionImageUrl": "https://your_supabase_url/storage/v1/object/public/photos/path/image.jpg", // NEW FIELD!
       "options": [
         "v = u + at",
-        "s = ut + 0.5at^2",
-        "v^2 = u^2 + 2as",
-        "F = ma"
+        // ...
       ],
       "correctAnswer": 0,
-      "marks": 4,
-      "negativeMarks": 1,
-      "solution": "The first equation of motion relates final velocity (v) to initial velocity (u), acceleration (a), and time (t)."
+      // ...
     },
     // ... more questions
   ]
@@ -199,12 +222,18 @@
     </div>
 
     <script type="module">
+        // Import Firebase for Firestore and Auth
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        // Import Supabase for Storage
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-        // IMPORTANT: In a real environment, __firebase_config and __initial_auth_token would be dynamically provided.
-        // Using hardcoded config for demonstration purposes in this single file context.
+        // --- CONFIGURATION ---
+        const BUCKET_NAME = 'Photos'; // <--- UPDATED: Changed from 'question-images' to 'Photos'
+
+        // Firebase Config (for Auth and Firestore Data)
         const firebaseConfig = {
           apiKey: "AIzaSyCQ34ZAWWCMuaQ01fvX0sI-YdklK0mJ5aw",
           authDomain: "testseries-38752.firebaseapp.com",
@@ -213,14 +242,21 @@
           messagingSenderId: "519384534407",
           appId: "1:519384534407:web:201265a9d703708334d722"
         };
-      
+        
+        // Supabase Config (for Storage)
+        const SUPABASE_URL = 'https://evetjiyruynvqhjfmuny.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2ZXRqaXlydXludnFoamZtdW55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1ODIyNjUsImV4cCI6MjA3NTE1ODI2NX0.5wjRCHPesj_4OywiFyFyh3uuYtD8zOGBY9aARUAOmxU';
+
+        // Initialize Clients
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
         class TestUploader {
             constructor() {
-                this.questions = [];
+                this.userId = null;
                 this.setupAuthListener();
                 this.setupEventListeners();
                 this.addQuestionField(); // Add one question by default
@@ -229,11 +265,11 @@
             setupAuthListener() {
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        // User is signed in, show main content
+                        this.userId = user.uid; // Store user ID for Supabase path
                         document.getElementById('login-view').classList.add('hidden');
                         document.getElementById('main-content').classList.remove('hidden');
                     } else {
-                        // User is signed out, show login
+                        this.userId = null;
                         document.getElementById('login-view').classList.remove('hidden');
                         document.getElementById('main-content').classList.add('hidden');
                     }
@@ -257,13 +293,94 @@
                 
                 // UI Form
                 document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
-                // Event listener for JSON generation (works without auth)
+                document.getElementById('questions-list').addEventListener('click', e => this.handleQuestionListClick(e));
                 document.getElementById('generate-json-btn').addEventListener('click', () => this.handleGenerateJson());
 
                 // JSON Upload (requires auth)
                 document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
             }
 
+            handleQuestionListClick(e) {
+                const target = e.target;
+                if (target.classList.contains('delete-btn')) {
+                    this.deleteQuestionField(target);
+                } else if (target.classList.contains('image-upload-btn')) {
+                    const questionItem = target.closest('.question-item');
+                    const fileInput = questionItem.querySelector('.question-image-file');
+                    const index = Array.from(document.querySelectorAll('#questions-list .question-item')).indexOf(questionItem);
+                    const testTitle = document.getElementById('title').value;
+
+                    if (fileInput.files.length === 0) {
+                        this.setError(questionItem.querySelector('.image-status'), 'Please select a file first.');
+                        return;
+                    }
+
+                    this.uploadImage(fileInput.files[0], testTitle, index, questionItem);
+                }
+            }
+
+            async uploadImage(file, testTitle, index, questionItem) {
+                const statusDiv = questionItem.querySelector('.image-status');
+                const urlInput = questionItem.querySelector('.question-image-url');
+                const uploadBtn = questionItem.querySelector('.image-upload-btn');
+                const urlDisplay = questionItem.querySelector('.image-url-display');
+
+                if (!this.userId) {
+                    this.setError(statusDiv, "User not authenticated. Please log in.");
+                    return;
+                }
+                
+                if (!testTitle) {
+                    this.setError(statusDiv, "Please enter a Test Title first.");
+                    return;
+                }
+
+                // Create a unique path: {TestTitle_slug}/Q{QIndex}_{timestamp}.jpg
+                const testSlug = testTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                const path = `${testSlug}/Q${index + 1}_${Date.now()}.${file.name.split('.').pop()}`;
+                
+                this.setLoading(uploadBtn, statusDiv, 'Uploading...', 'upload');
+                urlDisplay.textContent = '...';
+
+                try {
+                    const { data, error } = await supabase.storage
+                        .from(BUCKET_NAME)
+                        .upload(path, file, {
+                            cacheControl: '3600',
+                            upsert: false // Set to true if you want to allow overwriting
+                        });
+
+                    if (error) {
+                        throw new Error(`Supabase Storage Error: ${error.message}`);
+                    }
+
+                    // Get the public URL
+                    const { data: publicUrlData } = supabase.storage
+                        .from(BUCKET_NAME)
+                        .getPublicUrl(data.path);
+
+                    if (!publicUrlData || !publicUrlData.publicUrl) {
+                        throw new Error("Could not retrieve public URL after upload.");
+                    }
+
+                    // Success: Update the hidden input and display the URL
+                    urlInput.value = publicUrlData.publicUrl;
+                    urlDisplay.innerHTML = `**URL Generated:** ${publicUrlData.publicUrl}`;
+                    this.setSuccess(statusDiv, 'Image uploaded successfully!');
+                    
+                    return publicUrlData.publicUrl;
+
+                } catch (error) {
+                    urlInput.value = '';
+                    urlDisplay.textContent = 'No URL generated.';
+                    this.setError(statusDiv, `Upload Failed: ${error.message}`);
+                    console.error("Image Upload Error:", error);
+                } finally {
+                    this.setIdle(uploadBtn, 'Upload Image', 'upload');
+                }
+            }
+
+            // Authentication/Login remains in Firebase
             async handleLogin(e) {
                 e.preventDefault();
                 const email = document.getElementById('email').value;
@@ -271,15 +388,13 @@
                 const statusDiv = document.getElementById('login-status');
                 const loginBtn = document.getElementById('login-btn');
                 
-                this.setLoading(loginBtn, statusDiv, 'Logging in...');
+                this.setLoading(loginBtn, statusDiv, 'Logging in...', 'login');
                 try {
-                    // Sign in using email/password (assuming these credentials exist in Firebase Auth)
                     await signInWithEmailAndPassword(auth, email, password);
-                    // Auth listener will automatically handle showing the main content on success
                 } catch (error) {
                     this.setError(statusDiv, error.message);
                 } finally {
-                    this.setIdle(loginBtn, 'Login');
+                    this.setIdle(loginBtn, 'Login', 'login');
                 }
             }
 
@@ -287,15 +402,28 @@
                 const index = document.querySelectorAll('#questions-list .question-item').length;
                 const questionList = document.getElementById('questions-list');
                 
-                // The `uploader` call works because `window.uploader` is set at the end of the script.
                 const fieldHTML = `
                     <div class="question-item" id="question-${index}">
                         <div class="question-header">
                             <h4>Question ${index + 1}</h4>
-                            <button type="button" class="btn delete-btn" onclick="uploader.deleteQuestionField(this)">Delete Question</button>
+                            <button type="button" class="btn delete-btn" >Delete Question</button>
                         </div>
                         <div class="form-group"><label>Question Text</label><textarea class="form-textarea question-text" rows="3" required></textarea></div>
-                        <!-- Removed Question Image URL Field -->
+                        
+                        <!-- NEW IMAGE UPLOAD SECTION (SUPABASE) -->
+                        <div class="image-upload-group">
+                            <label>Question Image (Optional)</label>
+                            <div class="image-upload-flex">
+                                <input type="file" class="form-input question-image-file" accept="image/jpeg, image/png, image/webp">
+                                <button type="button" class="btn btn-primary image-upload-btn" style="width: 120px; flex-shrink: 0;">Upload Image</button>
+                            </div>
+                            <!-- Hidden input to store the final public URL -->
+                            <input type="hidden" class="question-image-url" value="">
+                            <div class="image-status">Ready to upload.</div>
+                            <div class="image-url-display">No URL generated yet.</div>
+                        </div>
+                        <!-- END NEW IMAGE UPLOAD SECTION -->
+
                         <div class="form-grid">
                             <div class="form-group"><label>Option A</label><input type="text" class="form-input option-a" required></div>
                             <div class="form-group"><label>Option B</label><input type="text" class="form-input option-b" required></div>
@@ -310,18 +438,23 @@
                        <div class="form-group"><label>Solution</label><textarea class="form-textarea solution" rows="2" required></textarea></div>
                     </div>`;
                 questionList.insertAdjacentHTML('beforeend', fieldHTML);
+                this.reIndexQuestions();
             }
             
-            // Removes the question block and re-indexes the remaining questions
             deleteQuestionField(buttonElement) {
                 const questionItem = buttonElement.closest('.question-item');
                 if (questionItem) {
+                    const url = questionItem.querySelector('.question-image-url').value;
+                    if (url) {
+                        // NOTE: For a real application, you would add a call here 
+                        // to delete the file from Supabase Storage using its path.
+                        console.log(`[INFO] Image URL found for deletion: ${url}. Skipping actual Supabase delete for demo.`);
+                    }
                     questionItem.remove();
                     this.reIndexQuestions();
                 }
             }
 
-            // Re-indexes question numbers after deletion
             reIndexQuestions() {
                 const questionItems = document.querySelectorAll('#questions-list .question-item');
                 questionItems.forEach((item, index) => {
@@ -333,11 +466,10 @@
                 });
             }
 
-
-            async handleGenerateJson() {
+            handleGenerateJson() {
                 const statusDiv = document.getElementById('ui-status');
                 const generateBtn = document.getElementById('generate-json-btn');
-                this.setLoading(generateBtn, statusDiv, 'Generating...');
+                this.setLoading(generateBtn, statusDiv, 'Generating...', 'json');
 
                 try {
                     const testData = this.buildTestDataFromForm();
@@ -358,7 +490,7 @@
                             </head>
                             <body>
                                 <h3>Generated JSON Output</h3>
-                                <p>Copy the content below.</p>
+                                <p>Copy the content below. Note the <strong>questionImageUrl</strong> field for images.</p>
                                 <pre id="json-output">${jsonString}</pre>
                             </body>
                             </html>
@@ -370,8 +502,9 @@
                     }
                 } catch (error) {
                     this.setError(statusDiv, `Generation Failed: ${error.message}`);
+                    console.error("JSON Generation Error:", error);
                 } finally {
-                    this.setIdle(generateBtn, 'Generate JSON');
+                    this.setIdle(generateBtn, 'Generate JSON', 'json');
                 }
             }
             
@@ -382,6 +515,7 @@
                 
                 const questionsData = Array.from(document.querySelectorAll('.question-item')).map((q, i) => {
                     const questionText = q.querySelector('.question-text').value;
+                    const questionImageUrl = q.querySelector('.question-image-url').value; // READ THE PUBLIC URL
                     const options = [
                         q.querySelector('.option-a').value, 
                         q.querySelector('.option-b').value,
@@ -396,11 +530,11 @@
                     return {
                         id: i + 1,
                         questionText: questionText,
-                        // Removed questionImageUrl
+                        questionImageUrl: questionImageUrl || null, // Include the URL or null
                         options: options,
                         correctAnswer: parseInt(q.querySelector('.correct-answer').value),
                         subject: q.querySelector('.question-subject').value,
-                        topic: q.querySelector('.question-subject').value, // Assuming subject is topic for now
+                        topic: q.querySelector('.question-subject').value,
                         marks: parseInt(q.querySelector('.question-marks').value),
                         negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
                         solution: q.querySelector('.solution').value
@@ -420,12 +554,12 @@
                     questions: questionsData.length,
                     marks: questionsData.reduce((sum, q) => sum + q.marks, 0),
                     available: true,
-                    difficulty: 'medium', // Default value
+                    difficulty: 'medium',
                     questions_data: questionsData
                 };
             }
 
-            // This function handles the actual upload to Firebase, which is only accessible after login
+            // Upload function remains largely the same, saving to Firestore
             async handleJsonUpload() {
                 const jsonInput = document.getElementById('json-text-input');
                 const statusDiv = document.getElementById('json-status');
@@ -443,6 +577,7 @@
                     jsonInput.value = '';
                 } catch (error) {
                     this.setError(statusDiv, `Upload failed: ${error.message}`);
+                    console.error("JSON Tab Upload Error:", error);
                 } finally {
                     this.setIdle(uploadBtn, 'Upload JSON');
                 }
@@ -454,15 +589,13 @@
                 }
                 
                 if (!auth.currentUser) {
-                    // Safety check, though the UI should prevent this
                     throw new Error("Authentication required to upload data."); 
                 }
 
-                // 1. Save full test data
                 statusDiv.textContent = 'Uploading full test data...';
                 const testRef = doc(db, 'tests', testData.id);
                 
-                // Filtering data to ensure only relevant fields are saved
+                // Ensure the data structure is clean for Firestore
                 const dataToSave = { 
                     id: testData.id,
                     title: testData.title,
@@ -478,7 +611,7 @@
                     questions_data: testData.questions_data.map(q => ({
                         id: q.id,
                         questionText: q.questionText,
-                        // Removed questionImageUrl
+                        questionImageUrl: q.questionImageUrl || null, // Include the new field
                         options: q.options,
                         correctAnswer: q.correctAnswer,
                         subject: q.subject,
@@ -491,14 +624,13 @@
 
                 await setDoc(testRef, dataToSave);
 
-                // 2. Update aggregated list
+                // 2. Update aggregated list (Metadata without question details)
                 statusDiv.textContent = 'Updating aggregated test list...';
                 const aggregateDocRef = doc(db, "test_aggregates", "all_tests");
                 const aggregateDocSnap = await getDoc(aggregateDocRef);
                 const aggregatedData = aggregateDocSnap.exists() ? aggregateDocSnap.data() : { tests: [] };
                 let testsList = aggregatedData.tests || [];
 
-                // Create metadata object for aggregate list
                 const metadata = {
                     id: testData.id,
                     title: testData.title,
@@ -522,20 +654,28 @@
                 this.setSuccess(statusDiv, `Test "${testData.title}" uploaded successfully!`);
             }
 
-            setLoading(btn, statusDiv, text) {
+            // --- General UI Helpers ---
+
+            setLoading(btn, statusDiv, text, type) {
                 btn.disabled = true;
                 btn.innerHTML = `<div class="spinner"></div><span>${text}</span>`;
-                statusDiv.textContent = 'Processing...';
-                statusDiv.className = 'status';
+                if (statusDiv) {
+                    statusDiv.textContent = 'Processing...';
+                    statusDiv.className = 'status';
+                }
             }
 
             setError(statusDiv, message) {
-                statusDiv.textContent = message;
-                statusDiv.className = 'status error';
+                if (statusDiv) {
+                    statusDiv.textContent = message;
+                    statusDiv.className = 'status error';
+                }
             }
              setSuccess(statusDiv, message) {
-                statusDiv.textContent = message;
-                statusDiv.className = 'status success';
+                if (statusDiv) {
+                    statusDiv.textContent = message;
+                    statusDiv.className = 'status success';
+                }
             }
 
             setIdle(btn, text) {
@@ -544,8 +684,6 @@
             }
         }
         
-        // Expose uploader instance explicitly to the window object so it can be called 
-        // from the inline HTML onclick attribute.
         const uploader = new TestUploader(); 
         window.uploader = uploader;
     </script>
