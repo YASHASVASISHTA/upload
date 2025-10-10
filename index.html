@@ -53,7 +53,19 @@
         /* JSON Upload Specific */
         #json-text-input { height: 250px; font-family: 'Courier New', Courier, monospace; }
         .format-info { background-color: #f0fdf4; border: 1px solid #dcfce7; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem; font-size: 0.9rem; text-align: left;}
-        pre { background-color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', Courier, monospace; font-size: 0.875rem; border: 1px solid #cbd5e1;}
+        pre { 
+            background-color: #e2e8f0; 
+            padding: 1rem; 
+            border-radius: 0.5rem; 
+            white-space: pre-wrap; 
+            word-wrap: break-word; 
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 0.875rem; 
+            border: 1px solid #cbd5e1;
+            /* Added Max Height for better viewing on small screens */
+            max-height: 400px;
+            overflow-y: auto;
+        }
         
         /* UI Form Specific */
         #questions-container { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
@@ -90,6 +102,10 @@
             border-radius: 0.5rem;
             margin-top: 1rem;
         }
+        .image-upload-group.solution {
+            border: 1px solid #ffeebb; /* Yellow border for solution */
+            background-color: #fffaf0; /* Light yellow background for solution */
+        }
         .image-upload-flex {
             display: flex;
             gap: 10px;
@@ -115,19 +131,6 @@
             padding: 0.5rem;
             background-color: #e0fdf4;
             border-radius: 0.3rem;
-        }
-
-        /* Generated JSON Section Styles */
-        #json-output-area {
-            border: 2px solid #a7f3d0; /* Tailwind emerald-200 */
-            background-color: #ecfdf5; /* Tailwind emerald-50 */
-        }
-        .json-actions {
-            display: flex; 
-            justify-content: space-between; 
-            gap: 1rem; 
-            margin-bottom: 0.75rem;
-            flex-wrap: wrap;
         }
     </style>
 </head>
@@ -188,27 +191,24 @@
                             <button type="button" class="btn" id="add-question-btn" style="margin-top: 1rem; background-color: #374151; width: auto;">+ Add Question</button>
                         </div>
 
-                        <div style="text-align: right; margin-top: 2rem;">
-                             <button type="button" class="btn" id="generate-json-btn" style="width: auto;">Generate JSON</button>
+                        <!-- Buttons for JSON Generation and Uploading -->
+                        <div style="text-align: right; margin-top: 2rem; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;">
+                            <button type="button" class="btn" id="generate-json-btn" style="width: 200px; flex-grow: 1;">Generate JSON Preview</button>
+                            <button type="button" class="btn" id="upload-generated-test-btn" style="width: 200px; flex-grow: 1;" disabled>Upload Generated Test</button>
                         </div>
                     </form>
-                    
+
                     <div id="ui-status" class="status"></div>
                     
-                    <!-- NEW: Generated JSON Output Area (on-page) -->
-                    <div id="json-output-area" class="card hidden" style="margin-top: 2rem; padding: 1.5rem;">
-                        <h3 style="font-size: 1.25rem; color: #1f2937; margin-bottom: 1rem;">Generated Test JSON</h3>
-                        <div class="json-actions">
-                            <button type="button" class="btn" id="copy-json-onpage-btn" style="width: 48%; background-color: #059669;">Copy JSON</button>
-                            <button type="button" class="btn" id="clear-form-btn" style="width: 48%; background-color: #ef4444;">Clear Form (Redo)</button>
-                        </div>
-                        <pre id="json-output-pre" style="max-height: 400px; overflow-y: auto;"></pre>
-                        <div id="copy-status-onpage" class="status"></div>
+                    <!-- JSON Output Preview -->
+                    <div id="json-output-container" class="hidden" style="margin-top: 1.5rem;">
+                        <p style="font-weight: 600; margin-bottom: 0.5rem; color: var(--primary);">Generated Test JSON Preview:</p>
+                        <pre id="json-output-preview"></pre>
+                        <button type="button" class="btn" id="copy-json-from-preview" style="width: 100%; max-width: 250px; margin-top: 1rem; background-color: #4b5563;">Copy JSON to Clipboard</button>
                     </div>
-                    <!-- END NEW SECTION -->
 
                     <div class="format-info">
-                        <p><strong>Note:</strong> The "Generate JSON" button will display the output below, allowing you to copy it directly or clear the form to start over.</p>
+                        <p><strong>Note:</strong> Upload images using the dedicated "Upload" buttons before generating the final JSON.</p>
                     </div>
                 </div>
 
@@ -225,12 +225,13 @@
   "id": "unique-test-id-string",
   "title": "Test Title",
   "type": "JEE",
-  // ... other metadata
+  // ... metadata
   "questions_data": [
     {
       "id": 1,
       "questionText": "What is the first equation of motion?",
-      "questionImageUrl": "https://your_supabase_url/storage/v1/object/public/photos/path/image.jpg", // NEW FIELD!
+      "questionImageUrl": "https://your_supabase_url/path/image.jpg", // Question Image URL
+      "solutionImageUrl": "https://your_supabase_url/path/solution.jpg", // Solution Image URL
       "options": [
         "v = u + at",
         // ...
@@ -258,7 +259,8 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         // --- CONFIGURATION ---
-        const BUCKET_NAME = 'Photos'; 
+        const BUCKET_NAME = 'Photos'; // Supabase bucket name
+        const MAX_IMAGE_SIZE_BYTES = 200 * 1024; // 200 KB limit for images
 
         // Firebase Config (for Auth and Firestore Data)
         const firebaseConfig = {
@@ -284,6 +286,7 @@
         class TestUploader {
             constructor() {
                 this.userId = null;
+                this.generatedJson = null; // Store the last generated JSON object
                 this.setupAuthListener();
                 this.setupEventListeners();
                 this.addQuestionField(); // Add one question by default
@@ -322,40 +325,141 @@
                 document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
                 document.getElementById('questions-list').addEventListener('click', e => this.handleQuestionListClick(e));
                 
-                // Generation, Copy, and Clear (New On-Page Functionality)
+                // JSON generation, Copy, and Direct Upload buttons
                 document.getElementById('generate-json-btn').addEventListener('click', () => this.handleGenerateJson());
-                document.getElementById('copy-json-onpage-btn').addEventListener('click', () => this.copyJson());
-                document.getElementById('clear-form-btn').addEventListener('click', () => this.clearForm());
+                document.getElementById('upload-generated-test-btn').addEventListener('click', () => this.handleUploadGeneratedTest());
+                document.getElementById('copy-json-from-preview').addEventListener('click', () => this.handleCopyJson());
 
 
                 // JSON Upload (requires auth)
                 document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
             }
 
+            // Handle Direct Upload from the Form Tab
+            async handleUploadGeneratedTest() {
+                const uploadBtn = document.getElementById('upload-generated-test-btn');
+                const statusDiv = document.getElementById('ui-status');
+
+                if (!this.generatedJson) {
+                    this.setError(statusDiv, "Please generate the JSON preview first.");
+                    return;
+                }
+
+                // Ensure UI status is cleared for this new attempt
+                statusDiv.textContent = 'Preparing upload...';
+                statusDiv.className = 'status'; 
+
+                this.setLoading(uploadBtn, statusDiv, 'Uploading Test...');
+                
+                try {
+                    await this.uploadTestData(this.generatedJson, statusDiv);
+                    // Clear the generated JSON locally after successful upload
+                    this.generatedJson = null;
+                    document.getElementById('json-output-container').classList.add('hidden');
+                } catch (error) {
+                    this.setError(statusDiv, `Upload failed: ${error.message}`);
+                    console.error("Direct Upload Error:", error);
+                } finally {
+                    this.setIdle(uploadBtn, 'Upload Generated Test');
+                }
+            }
+
+
+            // Handle Copy JSON to clipboard
+            handleCopyJson() {
+                const statusDiv = document.getElementById('ui-status');
+                const copyBtn = document.getElementById('copy-json-from-preview');
+
+                if (!this.generatedJson) {
+                    this.setError(statusDiv, "No JSON generated yet. Please click 'Generate JSON Preview' first.");
+                    return;
+                }
+                
+                this.setLoading(copyBtn, statusDiv, 'Copying...');
+
+                try {
+                    const jsonString = JSON.stringify(this.generatedJson, null, 2);
+                    // Use document.execCommand('copy') for better iframe compatibility
+                    const tempTextArea = document.createElement('textarea');
+                    tempTextArea.style.position = 'fixed';
+                    tempTextArea.style.opacity = '0';
+                    tempTextArea.value = jsonString;
+                    document.body.appendChild(tempTextArea);
+                    
+                    tempTextArea.select();
+                    document.execCommand('copy');
+                    
+                    document.body.removeChild(tempTextArea);
+
+                    this.setSuccess(statusDiv, 'JSON copied to clipboard!');
+                } catch (err) {
+                    console.error('Failed to copy JSON:', err);
+                    this.setError(statusDiv, 'Failed to copy JSON. Please manually copy from the preview box.');
+                } finally {
+                    this.setIdle(copyBtn, 'Copy JSON to Clipboard');
+                }
+            }
+
+
             handleQuestionListClick(e) {
                 const target = e.target;
                 if (target.classList.contains('delete-btn')) {
                     this.deleteQuestionField(target);
-                } else if (target.classList.contains('image-upload-btn')) {
-                    const questionItem = target.closest('.question-item');
+                    return;
+                } 
+                
+                const questionItem = target.closest('.question-item');
+                if (!questionItem) return;
+
+                const index = Array.from(document.querySelectorAll('#questions-list .question-item')).indexOf(questionItem);
+                const testTitle = document.getElementById('title').value;
+
+                if (target.classList.contains('question-image-btn')) {
                     const fileInput = questionItem.querySelector('.question-image-file');
-                    const index = Array.from(document.querySelectorAll('#questions-list .question-item')).indexOf(questionItem);
-                    const testTitle = document.getElementById('title').value;
+                    const statusDiv = questionItem.querySelector('.question-image-status');
+                    const urlInput = questionItem.querySelector('.question-image-url');
+                    const urlDisplay = questionItem.querySelector('.question-image-display');
+                    this.triggerUpload(fileInput, testTitle, index, 'question', statusDiv, urlInput, target, urlDisplay);
 
-                    if (fileInput.files.length === 0) {
-                        this.setError(questionItem.querySelector('.image-status'), 'Please select a file first.');
-                        return;
-                    }
-
-                    this.uploadImage(fileInput.files[0], testTitle, index, questionItem);
+                } else if (target.classList.contains('solution-image-btn')) {
+                    const fileInput = questionItem.querySelector('.solution-image-file');
+                    const statusDiv = questionItem.querySelector('.solution-image-status');
+                    const urlInput = questionItem.querySelector('.solution-image-url');
+                    const urlDisplay = questionItem.querySelector('.solution-image-display');
+                    this.triggerUpload(fileInput, testTitle, index, 'solution', statusDiv, urlInput, target, urlDisplay);
                 }
             }
 
-            async uploadImage(file, testTitle, index, questionItem) {
-                const statusDiv = questionItem.querySelector('.image-status');
-                const urlInput = questionItem.querySelector('.question-image-url');
-                const uploadBtn = questionItem.querySelector('.image-upload-btn');
-                const urlDisplay = questionItem.querySelector('.image-url-display');
+            // Centralized function to handle both Question and Solution image uploads
+            async triggerUpload(fileInput, testTitle, index, fileType, statusDiv, urlInput, uploadBtn, urlDisplay) {
+                
+                // --- FIX: Add null checks for robustness against missing DOM elements ---
+                if (!statusDiv || !urlDisplay || !urlInput) {
+                    console.error("Required DOM elements (statusDiv, urlDisplay, or urlInput) are missing. Cannot proceed.");
+                    return;
+                }
+                // --- END FIX ---
+                
+                // 1. Clear previous status before starting a new attempt
+                statusDiv.textContent = 'Checking file...';
+                statusDiv.className = 'status'; // Reset to default style
+                urlDisplay.textContent = `No ${fileType} image URL generated yet.`;
+                urlInput.value = ''; // Reset hidden URL
+
+                if (fileInput.files.length === 0) {
+                    this.setError(statusDiv, 'Please select a file first.');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+
+                // --- IMAGE SIZE CHECK (200 KB) ---
+                if (file.size > MAX_IMAGE_SIZE_BYTES) {
+                    const sizeKB = (file.size / 1024).toFixed(1);
+                    this.setError(statusDiv, `File too large! Max size is 200 KB. This file is ${sizeKB} KB.`);
+                    return;
+                }
+                // --- END IMAGE SIZE CHECK ---
 
                 if (!this.userId) {
                     this.setError(statusDiv, "User not authenticated. Please log in.");
@@ -367,9 +471,10 @@
                     return;
                 }
 
-                // Create a unique path: {TestTitle_slug}/Q{QIndex}_{timestamp}.jpg
+                
                 const testSlug = testTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-                const path = `${testSlug}/Q${index + 1}_${Date.now()}.${file.name.split('.').pop()}`;
+                // Path: {testSlug}/Q{QIndex}_{fileType}_{timestamp}.{ext}
+                const path = `${testSlug}/Q${index + 1}_${fileType}_${Date.now()}.${file.name.split('.').pop()}`;
                 
                 this.setLoading(uploadBtn, statusDiv, 'Uploading...', 'upload');
                 urlDisplay.textContent = '...';
@@ -379,7 +484,7 @@
                         .from(BUCKET_NAME)
                         .upload(path, file, {
                             cacheControl: '3600',
-                            upsert: false // Set to true if you want to allow overwriting
+                            upsert: false
                         });
 
                     if (error) {
@@ -397,8 +502,8 @@
 
                     // Success: Update the hidden input and display the URL
                     urlInput.value = publicUrlData.publicUrl;
-                    urlDisplay.innerHTML = `**URL Generated:** ${publicUrlData.publicUrl}`;
-                    this.setSuccess(statusDiv, 'Image uploaded successfully!');
+                    urlDisplay.innerHTML = `**URL Generated (${fileType}):** ${publicUrlData.publicUrl}`;
+                    this.setSuccess(statusDiv, `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} image uploaded successfully!`);
                     
                     return publicUrlData.publicUrl;
 
@@ -408,7 +513,9 @@
                     this.setError(statusDiv, `Upload Failed: ${error.message}`);
                     console.error("Image Upload Error:", error);
                 } finally {
-                    this.setIdle(uploadBtn, 'Upload Image', 'upload');
+                    // Update button text back to normal
+                    const buttonText = `Upload ${fileType.charAt(0).toUpperCase() + fileType.slice(1)} Image`;
+                    this.setIdle(uploadBtn, buttonText, 'upload');
                 }
             }
 
@@ -442,19 +549,19 @@
                         </div>
                         <div class="form-group"><label>Question Text</label><textarea class="form-textarea question-text" rows="3" required></textarea></div>
                         
-                        <!-- NEW IMAGE UPLOAD SECTION (SUPABASE) -->
+                        <!-- QUESTION IMAGE UPLOAD SECTION (SUPABASE) -->
                         <div class="image-upload-group">
-                            <label>Question Image (Optional)</label>
+                            <label>Question Image (Optional) - Max 200 KB</label>
                             <div class="image-upload-flex">
                                 <input type="file" class="form-input question-image-file" accept="image/jpeg, image/png, image/webp">
-                                <button type="button" class="btn btn-primary image-upload-btn" style="width: 120px; flex-shrink: 0;">Upload Image</button>
+                                <button type="button" class="btn btn-primary question-image-btn" style="width: 150px; flex-shrink: 0;">Upload Question Image</button>
                             </div>
                             <!-- Hidden input to store the final public URL -->
                             <input type="hidden" class="question-image-url" value="">
-                            <div class="image-status">Ready to upload.</div>
-                            <div class="image-url-display">No URL generated yet.</div>
+                            <div class="image-status question-image-status">Ready to upload.</div>
+                            <div class="image-url-display question-image-display">No question image URL generated yet.</div>
                         </div>
-                        <!-- END NEW IMAGE UPLOAD SECTION -->
+                        <!-- END QUESTION IMAGE UPLOAD SECTION -->
 
                         <div class="form-grid">
                             <div class="form-group"><label>Option A</label><input type="text" class="form-input option-a" required></div>
@@ -467,7 +574,22 @@
                             <div class="form-group"><label>Subject</label><input type="text" class="form-input question-subject" required></div>
                             <div class="form-group"><label>Marks</label><input type="number" class="form-input question-marks" value="4" required></div>
                         </div>
-                       <div class="form-group"><label>Solution</label><textarea class="form-textarea solution" rows="2" required></textarea></div>
+                        <div class="form-group"><label>Solution Text</label><textarea class="form-textarea solution" rows="2" required></textarea></div>
+
+                        <!-- NEW SOLUTION IMAGE UPLOAD SECTION (SUPABASE) -->
+                        <div class="image-upload-group solution">
+                            <label>Solution Image (Optional) - Max 200 KB</label>
+                            <div class="image-upload-flex">
+                                <input type="file" class="form-input solution-image-file" accept="image/jpeg, image/png, image/webp">
+                                <button type="button" class="btn btn-primary solution-image-btn" style="width: 150px; flex-shrink: 0;">Upload Solution Image</button>
+                            </div>
+                            <!-- Hidden input to store the final public URL -->
+                            <input type="hidden" class="solution-image-url" value="">
+                            <div class="image-status solution-image-status">Ready to upload.</div>
+                            <div class="image-url-display solution-image-display">No solution image URL generated yet.</div>
+                        </div>
+                        <!-- END SOLUTION IMAGE UPLOAD SECTION -->
+
                     </div>`;
                 questionList.insertAdjacentHTML('beforeend', fieldHTML);
                 this.reIndexQuestions();
@@ -476,12 +598,9 @@
             deleteQuestionField(buttonElement) {
                 const questionItem = buttonElement.closest('.question-item');
                 if (questionItem) {
-                    const url = questionItem.querySelector('.question-image-url').value;
-                    if (url) {
-                        // NOTE: For a real application, you would add a call here 
-                        // to delete the file from Supabase Storage using its path.
-                        console.log(`[INFO] Image URL found for deletion: ${url}. Skipping actual Supabase delete for demo.`);
-                    }
+                    // Log URLs for cleanup reference (actual Supabase delete skipped for demo)
+                    console.log(`[INFO] Question Image URL: ${questionItem.querySelector('.question-image-url').value}.`);
+                    console.log(`[INFO] Solution Image URL: ${questionItem.querySelector('.solution-image-url').value}.`);
                     questionItem.remove();
                     this.reIndexQuestions();
                 }
@@ -498,89 +617,39 @@
                 });
             }
 
-            // UPDATED: Handle JSON generation to display on the page
             handleGenerateJson() {
                 const statusDiv = document.getElementById('ui-status');
                 const generateBtn = document.getElementById('generate-json-btn');
-                const outputArea = document.getElementById('json-output-area');
-                const outputPre = document.getElementById('json-output-pre');
+                const uploadBtn = document.getElementById('upload-generated-test-btn');
+                const jsonContainer = document.getElementById('json-output-container');
+                const jsonPreview = document.getElementById('json-output-preview');
 
                 this.setLoading(generateBtn, statusDiv, 'Generating...', 'json');
+                uploadBtn.disabled = true;
+                jsonContainer.classList.add('hidden');
+                jsonPreview.textContent = ''; // Clear previous preview
 
                 try {
                     const testData = this.buildTestDataFromForm();
+                    this.generatedJson = testData; // Store the object
                     const jsonString = JSON.stringify(testData, null, 2);
 
-                    outputPre.textContent = jsonString;
-                    outputArea.classList.remove('hidden');
-                    
-                    // Scroll to the generated JSON section
-                    outputArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    
-                    this.setSuccess(statusDiv, `JSON successfully generated below. Copy it or upload directly!`);
+                    // Display in the preview box
+                    jsonPreview.textContent = jsonString;
+                    jsonContainer.classList.remove('hidden');
+
+                    this.setSuccess(statusDiv, `JSON structure successfully generated! Ready to upload.`);
+                    uploadBtn.disabled = false;
 
                 } catch (error) {
-                    outputArea.classList.add('hidden');
                     this.setError(statusDiv, `Generation Failed: ${error.message}`);
                     console.error("JSON Generation Error:", error);
+                    this.generatedJson = null;
                 } finally {
-                    this.setIdle(generateBtn, 'Generate JSON', 'json');
+                    this.setIdle(generateBtn, 'Generate JSON Preview', 'json');
                 }
             }
             
-            // NEW: Copy JSON to clipboard function
-            copyJson() {
-                const jsonOutput = document.getElementById('json-output-pre').innerText;
-                const statusDiv = document.getElementById('copy-status-onpage');
-
-                // Use document.execCommand('copy') for reliability in iframes
-                const tempTextArea = document.createElement('textarea');
-                tempTextArea.value = jsonOutput;
-                tempTextArea.style.position = 'fixed'; // Make it invisible
-                tempTextArea.style.left = '-9999px';
-                document.body.appendChild(tempTextArea);
-                tempTextArea.select();
-                
-                try {
-                    document.execCommand('copy');
-                    this.setSuccess(statusDiv, 'JSON Copied to clipboard!');
-                } catch (err) {
-                    this.setError(statusDiv, 'Failed to copy JSON. Please select the text and copy manually.');
-                } finally {
-                    document.body.removeChild(tempTextArea);
-                    // Clear status after a short delay
-                    setTimeout(() => {
-                        statusDiv.textContent = '';
-                        statusDiv.className = 'status';
-                    }, 2000);
-                }
-            }
-
-            // NEW: Clear form/redo page function
-            clearForm() {
-                // Clear Test Details
-                document.getElementById('title').value = '';
-                document.getElementById('type').value = '';
-                document.getElementById('description').value = '';
-                document.getElementById('duration').value = '';
-                document.getElementById('negativeMarks').value = '';
-                document.getElementById('subjects').value = '';
-
-                // Clear Questions
-                const questionsList = document.getElementById('questions-list');
-                questionsList.innerHTML = ''; // Remove all question fields
-                this.addQuestionField(); // Add one fresh question field
-
-                // Hide JSON output and clear status
-                document.getElementById('json-output-area').classList.add('hidden');
-                document.getElementById('ui-status').textContent = 'Form successfully reset. Start creating your new test!';
-                document.getElementById('ui-status').className = 'status success';
-                
-                // Scroll to the top of the form
-                document.getElementById('ui-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-
-
             buildTestDataFromForm() {
                 const title = document.getElementById('title').value;
                 if (!title) throw new Error("Test Title is required.");
@@ -588,7 +657,8 @@
                 
                 const questionsData = Array.from(document.querySelectorAll('.question-item')).map((q, i) => {
                     const questionText = q.querySelector('.question-text').value;
-                    const questionImageUrl = q.querySelector('.question-image-url').value; // READ THE PUBLIC URL
+                    const questionImageUrl = q.querySelector('.question-image-url').value;
+                    const solutionImageUrl = q.querySelector('.solution-image-url').value;
                     const options = [
                         q.querySelector('.option-a').value, 
                         q.querySelector('.option-b').value,
@@ -596,14 +666,15 @@
                         q.querySelector('.option-d').value,
                     ];
                     
-                    if (!questionText || options.some(o => !o)) {
-                        throw new Error(`Question ${i + 1} is incomplete. Text and all 4 options are required.`);
+                    if (!questionText || options.some(o => !o) || !q.querySelector('.solution').value) {
+                        throw new Error(`Question ${i + 1} is incomplete. Text, all 4 options, and Solution Text are required.`);
                     }
 
                     return {
                         id: i + 1,
                         questionText: questionText,
-                        questionImageUrl: questionImageUrl || null, // Include the URL or null
+                        questionImageUrl: questionImageUrl || null,
+                        solutionImageUrl: solutionImageUrl || null, // Solution Image URL included
                         options: options,
                         correctAnswer: parseInt(q.querySelector('.correct-answer').value),
                         subject: q.querySelector('.question-subject').value,
@@ -632,7 +703,7 @@
                 };
             }
 
-            // Upload function remains largely the same, saving to Firestore
+            // Upload function for JSON tab
             async handleJsonUpload() {
                 const jsonInput = document.getElementById('json-text-input');
                 const statusDiv = document.getElementById('json-status');
@@ -656,6 +727,7 @@
                 }
             }
 
+            // Core function to save data to Firestore
             async uploadTestData(testData, statusDiv) {
                 if (!testData.id || !testData.title || !testData.questions_data) {
                     throw new Error("Invalid data structure. 'id', 'title', and 'questions_data' are required.");
@@ -684,7 +756,8 @@
                     questions_data: testData.questions_data.map(q => ({
                         id: q.id,
                         questionText: q.questionText,
-                        questionImageUrl: q.questionImageUrl || null, // Include the new field
+                        questionImageUrl: q.questionImageUrl || null,
+                        solutionImageUrl: q.solutionImageUrl || null,
                         options: q.options,
                         correctAnswer: q.correctAnswer,
                         subject: q.subject,
@@ -733,8 +806,7 @@
                 btn.disabled = true;
                 btn.innerHTML = `<div class="spinner"></div><span>${text}</span>`;
                 if (statusDiv) {
-                    statusDiv.textContent = 'Processing...';
-                    statusDiv.className = 'status';
+                    // statusDiv is handled by the caller or its own function
                 }
             }
 
