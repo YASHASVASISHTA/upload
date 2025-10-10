@@ -62,7 +62,6 @@
             font-family: 'Courier New', Courier, monospace; 
             font-size: 0.875rem; 
             border: 1px solid #cbd5e1;
-            /* Added Max Height for better viewing on small screens */
             max-height: 400px;
             overflow-y: auto;
         }
@@ -261,6 +260,7 @@
         // --- CONFIGURATION ---
         const BUCKET_NAME = 'Photos'; // Supabase bucket name
         const MAX_IMAGE_SIZE_BYTES = 200 * 1024; // 200 KB limit for images
+        const IMAGE_STATUS_TIMEOUT_MS = 5000; // 5 seconds for image status messages
 
         // Firebase Config (for Auth and Firestore Data)
         const firebaseConfig = {
@@ -341,7 +341,8 @@
                 const statusDiv = document.getElementById('ui-status');
 
                 if (!this.generatedJson) {
-                    this.setError(statusDiv, "Please generate the JSON preview first.");
+                    // Timeout set to 0 to make this critical message persist
+                    this.setError(statusDiv, "Please generate the JSON preview first.", 0); 
                     return;
                 }
 
@@ -352,12 +353,22 @@
                 this.setLoading(uploadBtn, statusDiv, 'Uploading Test...');
                 
                 try {
-                    await this.uploadTestData(this.generatedJson, statusDiv);
+                    // Use a temporary status div for the upload process
+                    const tempStatusDiv = document.createElement('div');
+                    tempStatusDiv.className = 'status';
+                    statusDiv.parentNode.insertBefore(tempStatusDiv, statusDiv.nextSibling);
+
+                    await this.uploadTestData(this.generatedJson, tempStatusDiv);
+                    
+                    // After success, clear the temp status and show persistent success on main statusDiv
+                    tempStatusDiv.remove();
+                    this.setSuccess(statusDiv, `Test "${this.generatedJson.title}" uploaded successfully!`, 0);
+
                     // Clear the generated JSON locally after successful upload
                     this.generatedJson = null;
                     document.getElementById('json-output-container').classList.add('hidden');
                 } catch (error) {
-                    this.setError(statusDiv, `Upload failed: ${error.message}`);
+                    this.setError(statusDiv, `Upload failed: ${error.message}`, 0); // Persist critical error
                     console.error("Direct Upload Error:", error);
                 } finally {
                     this.setIdle(uploadBtn, 'Upload Generated Test');
@@ -371,7 +382,7 @@
                 const copyBtn = document.getElementById('copy-json-from-preview');
 
                 if (!this.generatedJson) {
-                    this.setError(statusDiv, "No JSON generated yet. Please click 'Generate JSON Preview' first.");
+                    this.setError(statusDiv, "No JSON generated yet. Please click 'Generate JSON Preview' first.", 0);
                     return;
                 }
                 
@@ -391,10 +402,10 @@
                     
                     document.body.removeChild(tempTextArea);
 
-                    this.setSuccess(statusDiv, 'JSON copied to clipboard!');
+                    this.setSuccess(statusDiv, 'JSON copied to clipboard!', IMAGE_STATUS_TIMEOUT_MS); // Auto-clear temporary success
                 } catch (err) {
                     console.error('Failed to copy JSON:', err);
-                    this.setError(statusDiv, 'Failed to copy JSON. Please manually copy from the preview box.');
+                    this.setError(statusDiv, 'Failed to copy JSON. Please manually copy from the preview box.', IMAGE_STATUS_TIMEOUT_MS); // Auto-clear temporary error
                 } finally {
                     this.setIdle(copyBtn, 'Copy JSON to Clipboard');
                 }
@@ -433,33 +444,56 @@
             // Centralized function to handle both Question and Solution image uploads
             async triggerUpload(fileInput, testTitle, index, fileType, statusDiv, urlInput, uploadBtn, urlDisplay) {
                 
-                // --- FIX: Add null checks for robustness against missing DOM elements ---
-                if (!statusDiv || !urlDisplay || !urlInput) {
-                    console.error("Required DOM elements (statusDiv, urlDisplay, or urlInput) are missing. Cannot proceed.");
+                // --- Critical element check (added detailed console log for debugging) ---
+                if (!fileInput || !statusDiv || !urlDisplay || !urlInput) {
+                    console.error(`Required DOM elements are missing. FileInput: ${!!fileInput}, StatusDiv: ${!!statusDiv}, UrlDisplay: ${!!urlDisplay}, UrlInput: ${!!urlInput}. Cannot proceed.`);
                     return;
                 }
-                // --- END FIX ---
+                // --- End check ---
                 
+                const initialStatusText = 'Ready to upload.';
+
                 // 1. Clear previous status before starting a new attempt
                 statusDiv.textContent = 'Checking file...';
-                statusDiv.className = 'status'; // Reset to default style
+                
+                // Set the status to loading, ensuring the identifier classes are kept
+                if (statusDiv.classList.contains('question-image-status')) {
+                    statusDiv.className = 'status image-status question-image-status';
+                } else if (statusDiv.classList.contains('solution-image-status')) {
+                    statusDiv.className = 'status image-status solution-image-status';
+                } else {
+                    statusDiv.className = 'status';
+                }
+
                 urlDisplay.textContent = `No ${fileType} image URL generated yet.`;
                 urlInput.value = ''; // Reset hidden URL
 
                 if (fileInput.files.length === 0) {
                     this.setError(statusDiv, 'Please select a file first.');
+                    // Set timeout to clear the temporary error
+                    setTimeout(() => {
+                        this.restoreImageStatusIdle(statusDiv, initialStatusText);
+                    }, IMAGE_STATUS_TIMEOUT_MS);
                     return;
                 }
 
                 const file = fileInput.files[0];
 
-                // --- IMAGE SIZE CHECK (200 KB) ---
+                // --- IMAGE SIZE CHECK (200 KB) & File Input Reset ---
                 if (file.size > MAX_IMAGE_SIZE_BYTES) {
                     const sizeKB = (file.size / 1024).toFixed(1);
                     this.setError(statusDiv, `File too large! Max size is 200 KB. This file is ${sizeKB} KB.`);
+                    fileInput.value = ''; // Reset the file input value
+                    
+                    // Set timeout to clear error
+                    setTimeout(() => {
+                        if (statusDiv.classList.contains('error')) { 
+                             this.restoreImageStatusIdle(statusDiv, initialStatusText);
+                        }
+                    }, IMAGE_STATUS_TIMEOUT_MS); 
                     return;
                 }
-                // --- END IMAGE SIZE CHECK ---
+                // --- END IMAGE SIZE CHECK & FILE RESET ---
 
                 if (!this.userId) {
                     this.setError(statusDiv, "User not authenticated. Please log in.");
@@ -502,8 +536,15 @@
 
                     // Success: Update the hidden input and display the URL
                     urlInput.value = publicUrlData.publicUrl;
-                    urlDisplay.innerHTML = `**URL Generated (${fileType}):** ${publicUrlData.publicUrl}`;
+                    urlDisplay.innerHTML = `<strong>URL Generated (${fileType}):</strong> ${publicUrlData.publicUrl}`;
                     this.setSuccess(statusDiv, `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} image uploaded successfully!`);
+                    
+                    // Set timeout to clear success message
+                    setTimeout(() => {
+                         if (statusDiv.classList.contains('success')) { 
+                            this.restoreImageStatusIdle(statusDiv, initialStatusText);
+                        }
+                    }, IMAGE_STATUS_TIMEOUT_MS);
                     
                     return publicUrlData.publicUrl;
 
@@ -511,12 +552,33 @@
                     urlInput.value = '';
                     urlDisplay.textContent = 'No URL generated.';
                     this.setError(statusDiv, `Upload Failed: ${error.message}`);
+                    fileInput.value = ''; // Reset file input on upload failure
                     console.error("Image Upload Error:", error);
+
+                    // Set timeout to clear error message
+                    setTimeout(() => {
+                        if (statusDiv.classList.contains('error')) { 
+                            this.restoreImageStatusIdle(statusDiv, initialStatusText);
+                        }
+                    }, IMAGE_STATUS_TIMEOUT_MS);
                 } finally {
                     // Update button text back to normal
                     const buttonText = `Upload ${fileType.charAt(0).toUpperCase() + fileType.slice(1)} Image`;
                     this.setIdle(uploadBtn, buttonText, 'upload');
                 }
+            }
+            
+            // New helper to restore image status to idle
+            restoreImageStatusIdle(statusDiv, initialText = 'Ready to upload.') {
+                if (statusDiv.classList.contains('question-image-status')) {
+                    statusDiv.className = 'image-status question-image-status';
+                } else if (statusDiv.classList.contains('solution-image-status')) {
+                    statusDiv.className = 'image-status solution-image-status';
+                } else {
+                    statusDiv.className = 'status'; // Generic status
+                    initialText = '';
+                }
+                statusDiv.textContent = initialText;
             }
 
             // Authentication/Login remains in Firebase
@@ -531,7 +593,7 @@
                 try {
                     await signInWithEmailAndPassword(auth, email, password);
                 } catch (error) {
-                    this.setError(statusDiv, error.message);
+                    this.setError(statusDiv, error.message, 0); // Persistent error
                 } finally {
                     this.setIdle(loginBtn, 'Login', 'login');
                 }
@@ -638,11 +700,11 @@
                     jsonPreview.textContent = jsonString;
                     jsonContainer.classList.remove('hidden');
 
-                    this.setSuccess(statusDiv, `JSON structure successfully generated! Ready to upload.`);
+                    this.setSuccess(statusDiv, `JSON structure successfully generated! Ready to upload.`, IMAGE_STATUS_TIMEOUT_MS);
                     uploadBtn.disabled = false;
 
                 } catch (error) {
-                    this.setError(statusDiv, `Generation Failed: ${error.message}`);
+                    this.setError(statusDiv, `Generation Failed: ${error.message}`, IMAGE_STATUS_TIMEOUT_MS);
                     console.error("JSON Generation Error:", error);
                     this.generatedJson = null;
                 } finally {
@@ -710,7 +772,7 @@
                 const uploadBtn = document.getElementById('upload-json-btn');
                 
                 if (!jsonInput.value.trim()) {
-                    this.setError(statusDiv, 'Please paste JSON content first.');
+                    this.setError(statusDiv, 'Please paste JSON content first.', 0); // Persistent error
                     return;
                 }
                 this.setLoading(uploadBtn, statusDiv, 'Uploading...');
@@ -720,7 +782,7 @@
                     await this.uploadTestData(testData, statusDiv);
                     jsonInput.value = '';
                 } catch (error) {
-                    this.setError(statusDiv, `Upload failed: ${error.message}`);
+                    this.setError(statusDiv, `Upload failed: ${error.message}`, 0); // Persistent error
                     console.error("JSON Tab Upload Error:", error);
                 } finally {
                     this.setIdle(uploadBtn, 'Upload JSON');
@@ -797,35 +859,90 @@
 
                 await setDoc(aggregateDocRef, { tests: testsList, lastUpdated: new Date().toISOString() });
                 
-                this.setSuccess(statusDiv, `Test "${testData.title}" uploaded successfully!`);
+                this.setSuccess(statusDiv, `Test "${testData.title}" uploaded successfully!`, 0); // Persistent success
             }
 
             // --- General UI Helpers ---
+
+            // Added optional timeout (default 5000ms) to automatically clear temporary status messages
+            setError(statusDiv, message, timeout = IMAGE_STATUS_TIMEOUT_MS) { 
+                if (statusDiv) {
+                    const isQuestionImage = statusDiv.classList.contains('question-image-status');
+                    const isSolutionImage = statusDiv.classList.contains('solution-image-status');
+
+                    // If it's an image status div, we explicitly include the identifier class when setting 'error'
+                    if (isQuestionImage) {
+                        statusDiv.className = 'status error image-status question-image-status';
+                    } else if (isSolutionImage) {
+                        statusDiv.className = 'status error image-status solution-image-status';
+                    } else {
+                        // For generic status divs (like login/upload)
+                        statusDiv.className = 'status error';
+                    }
+                    
+                    statusDiv.textContent = message;
+                    
+                    if (timeout > 0) {
+                        setTimeout(() => {
+                            if (statusDiv.textContent === message) {
+                                if (isQuestionImage || isSolutionImage) {
+                                    this.restoreImageStatusIdle(statusDiv, 'Ready to upload.');
+                                } else {
+                                    // Restore generic status
+                                    statusDiv.textContent = '';
+                                    statusDiv.className = 'status';
+                                }
+                            }
+                        }, timeout);
+                    }
+                }
+            }
+            // Added optional timeout (default 5000ms) to automatically clear temporary status messages
+            setSuccess(statusDiv, message, timeout = IMAGE_STATUS_TIMEOUT_MS) {
+                if (statusDiv) {
+                    const isQuestionImage = statusDiv.classList.contains('question-image-status');
+                    const isSolutionImage = statusDiv.classList.contains('solution-image-status');
+
+                    // If it's an image status div, we explicitly include the identifier class when setting 'success'
+                    if (isQuestionImage) {
+                        statusDiv.className = 'status success image-status question-image-status';
+                    } else if (isSolutionImage) {
+                        statusDiv.className = 'status success image-status solution-image-status';
+                    } else {
+                        // For generic status divs (like login/upload)
+                        statusDiv.className = 'status success';
+                    }
+
+                    statusDiv.textContent = message;
+
+                    if (timeout > 0) {
+                        setTimeout(() => {
+                            if (statusDiv.textContent === message) {
+                                if (isQuestionImage || isSolutionImage) {
+                                    this.restoreImageStatusIdle(statusDiv, 'Ready to upload.');
+                                } else {
+                                    // Restore generic status
+                                    statusDiv.textContent = '';
+                                    statusDiv.className = 'status';
+                                }
+                            }
+                        }, timeout);
+                    }
+                }
+            }
 
             setLoading(btn, statusDiv, text, type) {
                 btn.disabled = true;
                 btn.innerHTML = `<div class="spinner"></div><span>${text}</span>`;
                 if (statusDiv) {
-                    // statusDiv is handled by the caller or its own function
-                }
-            }
-
-            setError(statusDiv, message) {
-                if (statusDiv) {
-                    statusDiv.textContent = message;
-                    statusDiv.className = 'status error';
-                }
-            }
-             setSuccess(statusDiv, message) {
-                if (statusDiv) {
-                    statusDiv.textContent = message;
-                    statusDiv.className = 'status success';
+                    // Clear permanent status messages when a new process starts
+                    if (!type || type === 'login') statusDiv.textContent = '';
                 }
             }
 
             setIdle(btn, text) {
-                 btn.disabled = false;
-                 btn.innerHTML = `<span>${text}</span>`;
+                btn.disabled = false;
+                btn.innerHTML = `<span>${text}</span>`;
             }
         }
         
