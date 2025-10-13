@@ -62,13 +62,14 @@
             font-family: 'Courier New', Courier, monospace; 
             font-size: 0.875rem; 
             border: 1px solid #cbd5e1;
+            /* Added Max Height for better viewing on small screens */
             max-height: 400px;
             overflow-y: auto;
         }
         
         /* UI Form Specific */
         #questions-container { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
-        .question-item { background-color: var(--muted); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border); }
+        .question-item { background-color: var(--card); padding: 1.5rem; border-radius: 0.75rem; margin-bottom: 1.5rem; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         
         /* Question Header and Delete Button Styles */
         .question-header { 
@@ -131,6 +132,14 @@
             background-color: #e0fdf4;
             border-radius: 0.3rem;
         }
+        /* New style for question type selector */
+        .question-type-select-group {
+            background-color: #f9fafb;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -175,13 +184,21 @@
                         <h2>Test Details</h2>
                         <div class="form-grid">
                             <div class="form-group"><label for="title">Test Title</label><input type="text" id="title" class="form-input" required></div>
-                            <div class="form-group"><label for="type">Exam Type (e.g., JEE)</label><input type="text" id="type" class="form-input" required></div>
+                            <div class="form-group"><label for="type">Exam Type (e.g., JEE)</label><input type="text" id="type" class="form-input" value="JEE" required></div>
+                            <!-- NEW FIELD ADDED HERE -->
+                            <div class="form-group">
+                                <label for="syllabusType">Syllabus Type</label>
+                                <select id="syllabusType" class="form-select" required>
+                                    <option value="Chapterwise">Chapterwise</option>
+                                    <option value="Full Syllabus">Full Syllabus</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="form-group"><label for="description">Description</label><textarea id="description" class="form-textarea" rows="3"></textarea></div>
                         <div class="form-grid">
                             <div class="form-group"><label for="duration">Duration (mins)</label><input type="number" id="duration" class="form-input" required></div>
-                            <div class="form-group"><label for="negativeMarks">Negative Marks</label><input type="number" step="0.01" id="negativeMarks" class="form-input" required></div>
-                            <div class="form-group"><label for="subjects">Subjects (comma-separated)</label><input type="text" id="subjects" class="form-input" required></div>
+                            <div class="form-group"><label for="negativeMarks">Negative Marks</label><input type="number" step="0.01" id="negativeMarks" class="form-input" value="1" required></div>
+                            <div class="form-group"><label for="subjects">Subjects (comma-separated)</label><input type="text" id="subjects" class="form-input" value="Physics, Chemistry, Mathematics" required></div>
                         </div>
                         
                         <div id="questions-container">
@@ -201,7 +218,7 @@
                     
                     <!-- JSON Output Preview -->
                     <div id="json-output-container" class="hidden" style="margin-top: 1.5rem;">
-                        <p style="font-weight: 600; margin-bottom: 0.5rem; color: var(--primary);">Generated Test JSON Preview:</p>
+                        <p style="font-weight: 600; margin-bottom: 0.5rem; color: var(--primary);">Generated Test JSON Preview (Exact Schema Match):</p>
                         <pre id="json-output-preview"></pre>
                         <button type="button" class="btn" id="copy-json-from-preview" style="width: 100%; max-width: 250px; margin-top: 1rem; background-color: #4b5563;">Copy JSON to Clipboard</button>
                     </div>
@@ -218,27 +235,22 @@
                     <button id="upload-json-btn" class="btn" style="width: 100%; margin-top: 1rem;">Upload JSON</button>
                     <div id="json-status" class="status"></div>
                     <div class="format-info">
-                        <p><strong>Required JSON Format:</strong></p>
+                        <p><strong>Required JSON Format (Exact structure match, including NVQ properties and new Chapterwise field):</strong></p>
                         <pre>
 {
-  "id": "unique-test-id-string",
-  "title": "Test Title",
+  "id": "jee-mains-full-mock-75-qs",
+  "title": "...",
   "type": "JEE",
-  // ... metadata
+  "Chapterwise": true, // <--- NEW BOOLEAN FIELD
+  // ... metadata fields
+  "questions": 75,
+  "subjects": ["Physics"],
+  "difficulty": "medium",
+  "marks": 300,
+  "negativeMarks": 1,
+  "available": true,
   "questions_data": [
-    {
-      "id": 1,
-      "questionText": "What is the first equation of motion?",
-      "questionImageUrl": "https://your_supabase_url/path/image.jpg", // Question Image URL
-      "solutionImageUrl": "https://your_supabase_url/path/solution.jpg", // Solution Image URL
-      "options": [
-        "v = u + at",
-        // ...
-      ],
-      "correctAnswer": 0,
-      // ...
-    },
-    // ... more questions
+    // ... question objects
   ]
 }
                         </pre>
@@ -260,7 +272,6 @@
         // --- CONFIGURATION ---
         const BUCKET_NAME = 'Photos'; // Supabase bucket name
         const MAX_IMAGE_SIZE_BYTES = 200 * 1024; // 200 KB limit for images
-        const IMAGE_STATUS_TIMEOUT_MS = 5000; // 5 seconds for image status messages
 
         // Firebase Config (for Auth and Firestore Data)
         const firebaseConfig = {
@@ -324,6 +335,7 @@
                 // UI Form
                 document.getElementById('add-question-btn').addEventListener('click', () => this.addQuestionField());
                 document.getElementById('questions-list').addEventListener('click', e => this.handleQuestionListClick(e));
+                document.getElementById('questions-list').addEventListener('change', e => this.handleQuestionTypeChange(e));
                 
                 // JSON generation, Copy, and Direct Upload buttons
                 document.getElementById('generate-json-btn').addEventListener('click', () => this.handleGenerateJson());
@@ -335,14 +347,33 @@
                 document.getElementById('upload-json-btn').addEventListener('click', () => this.handleJsonUpload());
             }
 
+            handleQuestionTypeChange(e) {
+                if (e.target.classList.contains('question-type-select')) {
+                    const selector = e.target;
+                    const questionItem = selector.closest('.question-item');
+                    const type = selector.value;
+                    
+                    const mcqFields = questionItem.querySelector('.mcq-fields');
+                    const nvqFields = questionItem.querySelector('.nvq-fields');
+                    
+                    if (type === 'MCQ') {
+                        mcqFields.classList.remove('hidden');
+                        nvqFields.classList.add('hidden');
+                    } else if (type === 'NVQ') {
+                        mcqFields.classList.add('hidden');
+                        nvqFields.classList.remove('hidden');
+                    }
+                }
+            }
+
+
             // Handle Direct Upload from the Form Tab
             async handleUploadGeneratedTest() {
                 const uploadBtn = document.getElementById('upload-generated-test-btn');
                 const statusDiv = document.getElementById('ui-status');
 
                 if (!this.generatedJson) {
-                    // Timeout set to 0 to make this critical message persist
-                    this.setError(statusDiv, "Please generate the JSON preview first.", 0); 
+                    this.setError(statusDiv, "Please generate the JSON preview first.");
                     return;
                 }
 
@@ -353,22 +384,12 @@
                 this.setLoading(uploadBtn, statusDiv, 'Uploading Test...');
                 
                 try {
-                    // Use a temporary status div for the upload process
-                    const tempStatusDiv = document.createElement('div');
-                    tempStatusDiv.className = 'status';
-                    statusDiv.parentNode.insertBefore(tempStatusDiv, statusDiv.nextSibling);
-
-                    await this.uploadTestData(this.generatedJson, tempStatusDiv);
-                    
-                    // After success, clear the temp status and show persistent success on main statusDiv
-                    tempStatusDiv.remove();
-                    this.setSuccess(statusDiv, `Test "${this.generatedJson.title}" uploaded successfully!`, 0);
-
+                    await this.uploadTestData(this.generatedJson, statusDiv);
                     // Clear the generated JSON locally after successful upload
                     this.generatedJson = null;
                     document.getElementById('json-output-container').classList.add('hidden');
                 } catch (error) {
-                    this.setError(statusDiv, `Upload failed: ${error.message}`, 0); // Persist critical error
+                    this.setError(statusDiv, `Upload failed: ${error.message}`);
                     console.error("Direct Upload Error:", error);
                 } finally {
                     this.setIdle(uploadBtn, 'Upload Generated Test');
@@ -382,7 +403,7 @@
                 const copyBtn = document.getElementById('copy-json-from-preview');
 
                 if (!this.generatedJson) {
-                    this.setError(statusDiv, "No JSON generated yet. Please click 'Generate JSON Preview' first.", 0);
+                    this.setError(statusDiv, "No JSON generated yet. Please click 'Generate JSON Preview' first.");
                     return;
                 }
                 
@@ -402,10 +423,10 @@
                     
                     document.body.removeChild(tempTextArea);
 
-                    this.setSuccess(statusDiv, 'JSON copied to clipboard!', IMAGE_STATUS_TIMEOUT_MS); // Auto-clear temporary success
+                    this.setSuccess(statusDiv, 'JSON copied to clipboard!');
                 } catch (err) {
                     console.error('Failed to copy JSON:', err);
-                    this.setError(statusDiv, 'Failed to copy JSON. Please manually copy from the preview box.', IMAGE_STATUS_TIMEOUT_MS); // Auto-clear temporary error
+                    this.setError(statusDiv, 'Failed to copy JSON. Please manually copy from the preview box.');
                 } finally {
                     this.setIdle(copyBtn, 'Copy JSON to Clipboard');
                 }
@@ -444,64 +465,56 @@
             // Centralized function to handle both Question and Solution image uploads
             async triggerUpload(fileInput, testTitle, index, fileType, statusDiv, urlInput, uploadBtn, urlDisplay) {
                 
-                // --- Critical element check (added detailed console log for debugging) ---
-                if (!fileInput || !statusDiv || !urlDisplay || !urlInput) {
-                    console.error(`Required DOM elements are missing. FileInput: ${!!fileInput}, StatusDiv: ${!!statusDiv}, UrlDisplay: ${!!urlDisplay}, UrlInput: ${!!urlInput}. Cannot proceed.`);
+                const buttonText = `Upload ${fileType.charAt(0).toUpperCase() + fileType.slice(1)} Image`;
+
+                if (!statusDiv || !urlDisplay || !urlInput || !uploadBtn || !fileInput) {
+                    console.error("Required DOM elements missing. Cannot proceed.");
                     return;
                 }
-                // --- End check ---
                 
-                const initialStatusText = 'Ready to upload.';
-
                 // 1. Clear previous status before starting a new attempt
                 statusDiv.textContent = 'Checking file...';
-                
-                // Set the status to loading, ensuring the identifier classes are kept
-                if (statusDiv.classList.contains('question-image-status')) {
-                    statusDiv.className = 'status image-status question-image-status';
-                } else if (statusDiv.classList.contains('solution-image-status')) {
-                    statusDiv.className = 'status image-status solution-image-status';
-                } else {
-                    statusDiv.className = 'status';
-                }
-
+                statusDiv.className = 'status'; 
                 urlDisplay.textContent = `No ${fileType} image URL generated yet.`;
-                urlInput.value = ''; // Reset hidden URL
+                urlInput.value = ''; 
 
                 if (fileInput.files.length === 0) {
                     this.setError(statusDiv, 'Please select a file first.');
-                    // Set timeout to clear the temporary error
-                    setTimeout(() => {
-                        this.restoreImageStatusIdle(statusDiv, initialStatusText);
-                    }, IMAGE_STATUS_TIMEOUT_MS);
+                    this.setIdle(uploadBtn, buttonText); 
                     return;
                 }
 
                 const file = fileInput.files[0];
 
-                // --- IMAGE SIZE CHECK (200 KB) & File Input Reset ---
+                // --- IMAGE SIZE CHECK (200 KB) ---
                 if (file.size > MAX_IMAGE_SIZE_BYTES) {
                     const sizeKB = (file.size / 1024).toFixed(1);
                     this.setError(statusDiv, `File too large! Max size is 200 KB. This file is ${sizeKB} KB.`);
-                    fileInput.value = ''; // Reset the file input value
                     
-                    // Set timeout to clear error
+                    // FIX: Clear the file input selection immediately so the next attempt starts fresh.
+                    fileInput.value = ''; 
+
+                    this.setIdle(uploadBtn, buttonText); // Release the button immediately
+                    
+                    // Delay clearing the error message
                     setTimeout(() => {
-                        if (statusDiv.classList.contains('error')) { 
-                             this.restoreImageStatusIdle(statusDiv, initialStatusText);
-                        }
-                    }, IMAGE_STATUS_TIMEOUT_MS); 
+                        statusDiv.textContent = 'Ready to upload.'; 
+                        statusDiv.className = 'status'; 
+                    }, 1500); 
+
                     return;
                 }
-                // --- END IMAGE SIZE CHECK & FILE RESET ---
+                // --- END IMAGE SIZE CHECK ---
 
                 if (!this.userId) {
                     this.setError(statusDiv, "User not authenticated. Please log in.");
+                    this.setIdle(uploadBtn, buttonText);
                     return;
                 }
                 
                 if (!testTitle) {
                     this.setError(statusDiv, "Please enter a Test Title first.");
+                    this.setIdle(uploadBtn, buttonText);
                     return;
                 }
 
@@ -536,49 +549,21 @@
 
                     // Success: Update the hidden input and display the URL
                     urlInput.value = publicUrlData.publicUrl;
-                    urlDisplay.innerHTML = `<strong>URL Generated (${fileType}):</strong> ${publicUrlData.publicUrl}`;
+                    urlDisplay.innerHTML = `**URL Generated (${fileType}):** ${publicUrlData.publicUrl}`;
                     this.setSuccess(statusDiv, `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} image uploaded successfully!`);
-                    
-                    // Set timeout to clear success message
-                    setTimeout(() => {
-                         if (statusDiv.classList.contains('success')) { 
-                            this.restoreImageStatusIdle(statusDiv, initialStatusText);
-                        }
-                    }, IMAGE_STATUS_TIMEOUT_MS);
                     
                     return publicUrlData.publicUrl;
 
                 } catch (error) {
+                    // Reset file input and show error on failed upload
+                    fileInput.value = ''; 
                     urlInput.value = '';
                     urlDisplay.textContent = 'No URL generated.';
                     this.setError(statusDiv, `Upload Failed: ${error.message}`);
-                    fileInput.value = ''; // Reset file input on upload failure
                     console.error("Image Upload Error:", error);
-
-                    // Set timeout to clear error message
-                    setTimeout(() => {
-                        if (statusDiv.classList.contains('error')) { 
-                            this.restoreImageStatusIdle(statusDiv, initialStatusText);
-                        }
-                    }, IMAGE_STATUS_TIMEOUT_MS);
                 } finally {
-                    // Update button text back to normal
-                    const buttonText = `Upload ${fileType.charAt(0).toUpperCase() + fileType.slice(1)} Image`;
-                    this.setIdle(uploadBtn, buttonText, 'upload');
+                    this.setIdle(uploadBtn, buttonText);
                 }
-            }
-            
-            // New helper to restore image status to idle
-            restoreImageStatusIdle(statusDiv, initialText = 'Ready to upload.') {
-                if (statusDiv.classList.contains('question-image-status')) {
-                    statusDiv.className = 'image-status question-image-status';
-                } else if (statusDiv.classList.contains('solution-image-status')) {
-                    statusDiv.className = 'image-status solution-image-status';
-                } else {
-                    statusDiv.className = 'status'; // Generic status
-                    initialText = '';
-                }
-                statusDiv.textContent = initialText;
             }
 
             // Authentication/Login remains in Firebase
@@ -593,7 +578,7 @@
                 try {
                     await signInWithEmailAndPassword(auth, email, password);
                 } catch (error) {
-                    this.setError(statusDiv, error.message, 0); // Persistent error
+                    this.setError(statusDiv, error.message);
                 } finally {
                     this.setIdle(loginBtn, 'Login', 'login');
                 }
@@ -609,6 +594,15 @@
                             <h4>Question ${index + 1}</h4>
                             <button type="button" class="btn delete-btn" >Delete Question</button>
                         </div>
+                        
+                        <div class="form-group question-type-select-group">
+                            <label>Question Type</label>
+                            <select class="form-select question-type-select">
+                                <option value="MCQ">MCQ (Multiple Choice Question)</option>
+                                <option value="NVQ">NVQ (Numerical Value Question / Fill in the blank)</option>
+                            </select>
+                        </div>
+
                         <div class="form-group"><label>Question Text</label><textarea class="form-textarea question-text" rows="3" required></textarea></div>
                         
                         <!-- QUESTION IMAGE UPLOAD SECTION (SUPABASE) -->
@@ -625,20 +619,39 @@
                         </div>
                         <!-- END QUESTION IMAGE UPLOAD SECTION -->
 
-                        <div class="form-grid">
-                            <div class="form-group"><label>Option A</label><input type="text" class="form-input option-a" required></div>
-                            <div class="form-group"><label>Option B</label><input type="text" class="form-input option-b" required></div>
-                            <div class="form-group"><label>Option C</label><input type="text" class="form-input option-c" required></div>
-                            <div class="form-group"><label>Option D</label><input type="text" class="form-input option-d" required></div>
+                        <!-- MCQ Fields - Visible by default -->
+                        <div class="mcq-fields">
+                            <div class="form-grid">
+                                <div class="form-group"><label>Option A</label><input type="text" class="form-input option-a"></div>
+                                <div class="form-group"><label>Option B</label><input type="text" class="form-input option-b"></div>
+                                <div class="form-group"><label>Option C</label><input type="text" class="form-input option-c"></div>
+                                <div class="form-group"><label>Option D</label><input type="text" class="form-input option-d"></div>
+                            </div>
+                            <div class="form-group">
+                                <label>Correct Answer (MCQ Index)</label>
+                                <select class="form-select correct-answer-mcq">
+                                    <option value="0">A (Index 0)</option><option value="1">B (Index 1)</option><option value="2">C (Index 2)</option><option value="3">D (Index 3)</option>
+                                </select>
+                            </div>
                         </div>
+
+                        <!-- NVQ Fields - Hidden by default -->
+                        <div class="nvq-fields hidden">
+                            <div class="form-group">
+                                <label>Correct Numerical Answer (NVQ Value)</label>
+                                <input type="number" step="0.01" class="form-input correct-answer-nvq" placeholder="Enter the exact correct numerical value (e.g., 10.5 or 0.02)">
+                                <small style="color: #6b7280;">This must be a numerical value for NVQ type questions.</small>
+                            </div>
+                        </div>
+
                         <div class="form-grid">
-                            <div class="form-group"><label>Correct Answer</label><select class="form-select correct-answer"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></div>
-                            <div class="form-group"><label>Subject</label><input type="text" class="form-input question-subject" required></div>
+                            <div class="form-group"><label>Subject</label><input type="text" class="form-input question-subject" value="Physics" required></div>
+                            <div class="form-group"><label>Topic</label><input type="text" class="form-input question-topic" required></div>
                             <div class="form-group"><label>Marks</label><input type="number" class="form-input question-marks" value="4" required></div>
                         </div>
                         <div class="form-group"><label>Solution Text</label><textarea class="form-textarea solution" rows="2" required></textarea></div>
 
-                        <!-- NEW SOLUTION IMAGE UPLOAD SECTION (SUPABASE) -->
+                        <!-- SOLUTION IMAGE UPLOAD SECTION (SUPABASE) -->
                         <div class="image-upload-group solution">
                             <label>Solution Image (Optional) - Max 200 KB</label>
                             <div class="image-upload-flex">
@@ -700,11 +713,11 @@
                     jsonPreview.textContent = jsonString;
                     jsonContainer.classList.remove('hidden');
 
-                    this.setSuccess(statusDiv, `JSON structure successfully generated! Ready to upload.`, IMAGE_STATUS_TIMEOUT_MS);
+                    this.setSuccess(statusDiv, `JSON structure successfully generated! Ready to upload.`);
                     uploadBtn.disabled = false;
 
                 } catch (error) {
-                    this.setError(statusDiv, `Generation Failed: ${error.message}`, IMAGE_STATUS_TIMEOUT_MS);
+                    this.setError(statusDiv, `Generation Failed: ${error.message}`);
                     console.error("JSON Generation Error:", error);
                     this.generatedJson = null;
                 } finally {
@@ -713,54 +726,94 @@
             }
             
             buildTestDataFromForm() {
+                // --- Test Metadata ---
                 const title = document.getElementById('title').value;
                 if (!title) throw new Error("Test Title is required.");
-                const testId = `${title.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
+                const testId = title.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                const negativeMarksValue = parseFloat(document.getElementById('negativeMarks').value);
+                const subjectsArray = document.getElementById('subjects').value.split(',').map(s => s.trim()).filter(s => s);
                 
+                // Get the new syllabus type value and determine the boolean
+                const syllabusType = document.getElementById('syllabusType').value;
+                const isChapterwise = syllabusType === 'Chapterwise'; // Chapterwise: True if "Chapterwise", False if "Full Syllabus"
+                
+                // --- Questions Data ---
                 const questionsData = Array.from(document.querySelectorAll('.question-item')).map((q, i) => {
+                    const questionType = q.querySelector('.question-type-select').value;
                     const questionText = q.querySelector('.question-text').value;
-                    const questionImageUrl = q.querySelector('.question-image-url').value;
-                    const solutionImageUrl = q.querySelector('.solution-image-url').value;
-                    const options = [
-                        q.querySelector('.option-a').value, 
-                        q.querySelector('.option-b').value,
-                        q.querySelector('.option-c').value, 
-                        q.querySelector('.option-d').value,
-                    ];
-                    
-                    if (!questionText || options.some(o => !o) || !q.querySelector('.solution').value) {
-                        throw new Error(`Question ${i + 1} is incomplete. Text, all 4 options, and Solution Text are required.`);
+                    const solutionText = q.querySelector('.solution').value;
+
+                    if (!questionText || !solutionText) {
+                        throw new Error(`Question ${i + 1} is incomplete. Question Text and Solution Text are required.`);
                     }
 
-                    return {
+                    const questionEntry = {
                         id: i + 1,
-                        questionText: questionText,
-                        questionImageUrl: questionImageUrl || null,
-                        solutionImageUrl: solutionImageUrl || null, // Solution Image URL included
-                        options: options,
-                        correctAnswer: parseInt(q.querySelector('.correct-answer').value),
                         subject: q.querySelector('.question-subject').value,
-                        topic: q.querySelector('.question-subject').value,
-                        marks: parseInt(q.querySelector('.question-marks').value),
-                        negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
-                        solution: q.querySelector('.solution').value
-                    }
+                        topic: q.querySelector('.question-topic').value,
+                        questionType: questionType, // Added to match new schema
+                        questionText: questionText,
+                    };
+                    
+                    const qImageUrl = q.querySelector('.question-image-url').value;
+                    const solImageUrl = q.querySelector('.solution-image-url').value;
+
+                    if (qImageUrl) questionEntry.questionImageUrl = qImageUrl;
+
+
+                    if (questionType === 'MCQ') {
+                        const options = [
+                            q.querySelector('.option-a').value, 
+                            q.querySelector('.option-b').value,
+                            q.querySelector('.option-c').value, 
+                            q.querySelector('.option-d').value,
+                        ];
+                        if (options.some(o => !o)) {
+                            throw new Error(`Question ${i + 1} (MCQ) is incomplete. All 4 options are required.`);
+                        }
+                        questionEntry.options = options;
+                        questionEntry.correctAnswer = parseInt(q.querySelector('.correct-answer-mcq').value);
+                    } else if (questionType === 'NVQ') {
+                        // For NVQ, the NVQ field is type="number", so we parse it as a float.
+                        const correctAnswerValue = q.querySelector('.correct-answer-nvq').value.trim();
+                        if (!correctAnswerValue) {
+                            throw new Error(`Question ${i + 1} (NVQ) is incomplete. Correct Answer Value is required.`);
+                        }
+                        // Add NVQ-specific fields as requested in the latest schema
+                        questionEntry.options = ["nil"];
+                        questionEntry.correctAnswer = parseFloat(correctAnswerValue); // Store the numerical answer here
+                    } 
+                    
+                    // Add remaining common fields in the required order
+                    questionEntry.marks = parseInt(q.querySelector('.question-marks').value);
+                    questionEntry.negativeMarks = negativeMarksValue;
+                    questionEntry.solution = solutionText;
+                    
+                    if (solImageUrl) questionEntry.solutionImageUrl = solImageUrl;
+
+
+                    return questionEntry;
                 });
                 
                 if (questionsData.length === 0) throw new Error("Please add at least one question.");
                 
+                // Final object, ordered to match your reference
+                const totalMarks = questionsData.reduce((sum, q) => sum + q.marks, 0);
+
                 return {
                     id: testId,
                     title: title,
                     type: document.getElementById('type').value,
+                    // NEW FIELD: Chapterwise (as boolean)
+                    Chapterwise: isChapterwise, 
                     description: document.getElementById('description').value,
                     duration: parseInt(document.getElementById('duration').value),
-                    negativeMarks: parseFloat(document.getElementById('negativeMarks').value),
-                    subjects: document.getElementById('subjects').value.split(',').map(s => s.trim()),
                     questions: questionsData.length,
-                    marks: questionsData.reduce((sum, q) => sum + q.marks, 0),
-                    available: true,
+                    subjects: subjectsArray,
                     difficulty: 'medium',
+                    marks: totalMarks,
+                    negativeMarks: negativeMarksValue,
+                    available: true,
                     questions_data: questionsData
                 };
             }
@@ -772,7 +825,7 @@
                 const uploadBtn = document.getElementById('upload-json-btn');
                 
                 if (!jsonInput.value.trim()) {
-                    this.setError(statusDiv, 'Please paste JSON content first.', 0); // Persistent error
+                    this.setError(statusDiv, 'Please paste JSON content first.');
                     return;
                 }
                 this.setLoading(uploadBtn, statusDiv, 'Uploading...');
@@ -782,7 +835,7 @@
                     await this.uploadTestData(testData, statusDiv);
                     jsonInput.value = '';
                 } catch (error) {
-                    this.setError(statusDiv, `Upload failed: ${error.message}`, 0); // Persistent error
+                    this.setError(statusDiv, `Upload failed: ${error.message}`);
                     console.error("JSON Tab Upload Error:", error);
                 } finally {
                     this.setIdle(uploadBtn, 'Upload JSON');
@@ -799,40 +852,57 @@
                     throw new Error("Authentication required to upload data."); 
                 }
 
+                // Check for the new field in the incoming JSON (mandatory for consistency)
+                if (typeof testData.Chapterwise !== 'boolean') {
+                    throw new Error("JSON must contain the boolean field 'Chapterwise'.");
+                }
+
+
                 statusDiv.textContent = 'Uploading full test data...';
                 const testRef = doc(db, 'tests', testData.id);
                 
-                // Ensure the data structure is clean for Firestore
-                const dataToSave = { 
+                // Sanitize question data before saving, ensuring correct fields are present
+                const sanitizedQuestionsData = testData.questions_data.map(q => {
+                    const data = {
+                        id: q.id,
+                        subject: q.subject,
+                        topic: q.topic,
+                        questionType: q.questionType,
+                        questionText: q.questionText,
+                        options: q.options,
+                        correctAnswer: q.correctAnswer,
+                        marks: q.marks,
+                        negativeMarks: q.negativeMarks,
+                        solution: q.solution,
+                    };
+
+                    // Add optional fields if they exist
+                    if (q.questionImageUrl) data.questionImageUrl = q.questionImageUrl;
+                    if (q.solutionImageUrl) data.solutionImageUrl = q.solutionImageUrl;
+                    
+                    return data;
+                });
+
+                // Create main test object, enforcing required field order for storage (similar to the JSON output)
+                const dataToSave = {
                     id: testData.id,
                     title: testData.title,
                     type: testData.type,
+                    Chapterwise: testData.Chapterwise, // ADDED: Chapterwise: True/False
                     description: testData.description,
                     duration: testData.duration,
-                    negativeMarks: testData.negativeMarks,
-                    subjects: testData.subjects,
                     questions: testData.questions,
-                    marks: testData.marks,
-                    available: testData.available,
+                    subjects: testData.subjects,
                     difficulty: testData.difficulty,
-                    questions_data: testData.questions_data.map(q => ({
-                        id: q.id,
-                        questionText: q.questionText,
-                        questionImageUrl: q.questionImageUrl || null,
-                        solutionImageUrl: q.solutionImageUrl || null,
-                        options: q.options,
-                        correctAnswer: q.correctAnswer,
-                        subject: q.subject,
-                        topic: q.topic,
-                        marks: q.marks,
-                        negativeMarks: q.negativeMarks,
-                        solution: q.solution
-                    }))
+                    marks: testData.marks,
+                    negativeMarks: testData.negativeMarks,
+                    available: testData.available,
+                    questions_data: sanitizedQuestionsData
                 };
 
                 await setDoc(testRef, dataToSave);
 
-                // 2. Update aggregated list (Metadata without question details)
+                // 2. Update aggregated list
                 statusDiv.textContent = 'Updating aggregated test list...';
                 const aggregateDocRef = doc(db, "test_aggregates", "all_tests");
                 const aggregateDocSnap = await getDoc(aggregateDocRef);
@@ -843,14 +913,16 @@
                     id: testData.id,
                     title: testData.title,
                     type: testData.type,
+                    // ADDED: C: true/false for the aggregated document
+                    C: testData.Chapterwise, 
                     description: testData.description,
                     duration: testData.duration,
-                    negativeMarks: testData.negativeMarks,
-                    subjects: testData.subjects,
                     questions: testData.questions,
-                    marks: testData.marks,
-                    available: testData.available,
+                    subjects: testData.subjects,
                     difficulty: testData.difficulty,
+                    marks: testData.marks,
+                    negativeMarks: testData.negativeMarks,
+                    available: testData.available,
                 };
 
                 const existingIndex = testsList.findIndex(t => t.id === metadata.id);
@@ -859,90 +931,32 @@
 
                 await setDoc(aggregateDocRef, { tests: testsList, lastUpdated: new Date().toISOString() });
                 
-                this.setSuccess(statusDiv, `Test "${testData.title}" uploaded successfully!`, 0); // Persistent success
+                this.setSuccess(statusDiv, `Test "${testData.title}" uploaded successfully!`);
             }
 
             // --- General UI Helpers ---
 
-            // Added optional timeout (default 5000ms) to automatically clear temporary status messages
-            setError(statusDiv, message, timeout = IMAGE_STATUS_TIMEOUT_MS) { 
-                if (statusDiv) {
-                    const isQuestionImage = statusDiv.classList.contains('question-image-status');
-                    const isSolutionImage = statusDiv.classList.contains('solution-image-status');
-
-                    // If it's an image status div, we explicitly include the identifier class when setting 'error'
-                    if (isQuestionImage) {
-                        statusDiv.className = 'status error image-status question-image-status';
-                    } else if (isSolutionImage) {
-                        statusDiv.className = 'status error image-status solution-image-status';
-                    } else {
-                        // For generic status divs (like login/upload)
-                        statusDiv.className = 'status error';
-                    }
-                    
-                    statusDiv.textContent = message;
-                    
-                    if (timeout > 0) {
-                        setTimeout(() => {
-                            if (statusDiv.textContent === message) {
-                                if (isQuestionImage || isSolutionImage) {
-                                    this.restoreImageStatusIdle(statusDiv, 'Ready to upload.');
-                                } else {
-                                    // Restore generic status
-                                    statusDiv.textContent = '';
-                                    statusDiv.className = 'status';
-                                }
-                            }
-                        }, timeout);
-                    }
-                }
-            }
-            // Added optional timeout (default 5000ms) to automatically clear temporary status messages
-            setSuccess(statusDiv, message, timeout = IMAGE_STATUS_TIMEOUT_MS) {
-                if (statusDiv) {
-                    const isQuestionImage = statusDiv.classList.contains('question-image-status');
-                    const isSolutionImage = statusDiv.classList.contains('solution-image-status');
-
-                    // If it's an image status div, we explicitly include the identifier class when setting 'success'
-                    if (isQuestionImage) {
-                        statusDiv.className = 'status success image-status question-image-status';
-                    } else if (isSolutionImage) {
-                        statusDiv.className = 'status success image-status solution-image-status';
-                    } else {
-                        // For generic status divs (like login/upload)
-                        statusDiv.className = 'status success';
-                    }
-
-                    statusDiv.textContent = message;
-
-                    if (timeout > 0) {
-                        setTimeout(() => {
-                            if (statusDiv.textContent === message) {
-                                if (isQuestionImage || isSolutionImage) {
-                                    this.restoreImageStatusIdle(statusDiv, 'Ready to upload.');
-                                } else {
-                                    // Restore generic status
-                                    statusDiv.textContent = '';
-                                    statusDiv.className = 'status';
-                                }
-                            }
-                        }, timeout);
-                    }
-                }
-            }
-
-            setLoading(btn, statusDiv, text, type) {
+            setLoading(btn, statusDiv, text) {
                 btn.disabled = true;
                 btn.innerHTML = `<div class="spinner"></div><span>${text}</span>`;
+            }
+
+            setError(statusDiv, message) {
                 if (statusDiv) {
-                    // Clear permanent status messages when a new process starts
-                    if (!type || type === 'login') statusDiv.textContent = '';
+                    statusDiv.textContent = message;
+                    statusDiv.className = 'status error';
+                }
+            }
+             setSuccess(statusDiv, message) {
+                if (statusDiv) {
+                    statusDiv.textContent = message;
+                    statusDiv.className = 'status success';
                 }
             }
 
             setIdle(btn, text) {
-                btn.disabled = false;
-                btn.innerHTML = `<span>${text}</span>`;
+                 btn.disabled = false;
+                 btn.innerHTML = `<span>${text}</span>`;
             }
         }
         
